@@ -1,8 +1,9 @@
 @import "tailwindcss";
+@custom-variant dark (&:is(.dark *));
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #191b19; /* Brand Black */
 }
 
 @theme inline {
@@ -10,11 +11,17 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  
+  /* --- OBJEXIA BRAND SYSTEM --- */
+  --font-spartan: var(--font-league-spartan);
+  --color-brand-dark: #3f407e;   /* Dark Purple/Blue (Primary) */
+  --color-brand-light: #b3bbea;  /* Light Periwinkle (Accents) */
+  --color-brand-black: #191b19;  /* Almost Black (Text/BG) */
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
+    --background: #191b19; /* Brand Black Background */
     --foreground: #ededed;
   }
 }
@@ -23,4 +30,163 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* --- GLOBAL INTERACTIVITY FIX --- */
+button, 
+[role="button"],
+input[type="submit"],
+input[type="reset"],
+input[type="button"],
+select {
+  cursor: pointer !important;
+}
+
+button:disabled,
+input:disabled,
+select:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.6;
+}
+
+/* --- HIDE NUMBER INPUT SPINNERS --- */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* --- CUSTOM DATEPICKER STYLES --- */
+.react-datepicker-popper[data-placement^="bottom"] .react-datepicker__triangle {
+  display: none;
+}
+.react-datepicker-popper { z-index: 99999 !important; }
+
+.react-datepicker {
+  font-family: inherit !important;
+  border: none !important;
+  border-radius: 16px !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+  padding: 12px !important;
+  background-color: white !important;
+  animation: popupFadeIn 0.2s ease-out forwards;
+}
+
+@keyframes popupFadeIn {
+  from { opacity: 0; transform: translateY(-10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.react-datepicker__header {
+  background-color: white !important;
+  border-bottom: none !important;
+  padding-top: 5px !important;
+}
+
+.react-datepicker__current-month,
+.react-datepicker-year-header {
+  font-weight: 800 !important;
+  color: #1f2937 !important;
+  font-size: 1.1rem !important;
+  margin-bottom: 15px !important;
+  cursor: pointer !important;
+  transition: color 0.2s ease;
+}
+
+.react-datepicker__current-month:hover,
+.react-datepicker-year-header:hover {
+  color: #3f407e !important; /* Brand Dark */
+}
+
+.react-datepicker__navigation {
+  top: 18px !important;
+  border: 1px solid #f3f4f6;
+  border-radius: 50%;
+  height: 32px;
+  width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.react-datepicker__day-names {
+  margin-top: 5px !important;
+  border-bottom: 1px solid #f3f4f6 !important;
+  padding-bottom: 5px !important;
+  margin-bottom: 10px !important;
+}
+
+.react-datepicker__day-name {
+  color: #9ca3af !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  font-size: 0.7rem !important;
+  width: 2.5rem !important;
+}
+
+.react-datepicker__day {
+  width: 2.5rem !important;
+  line-height: 2.5rem !important;
+  border-radius: 9999px !important;
+  font-weight: 500 !important;
+  color: #374151 !important;
+  margin: 0.1rem !important;
+  transition: all 0.2s ease !important;
+}
+
+.react-datepicker__day:hover {
+  background-color: #eff6ff !important;
+  color: #3f407e !important; /* Brand Dark */
+}
+
+/* BRAND COLOR SELECTION */
+.react-datepicker__day--selected,
+.react-datepicker__month--selected,
+.react-datepicker__year-text--selected {
+  background-color: #3f407e !important; /* Brand Dark */
+  color: white !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 6px -1px rgba(63, 64, 126, 0.4) !important;
+}
+
+.react-datepicker__day--keyboard-selected {
+  background-color: transparent !important;
+  color: #374151 !important;
+}
+
+.react-datepicker__day--today {
+  color: #3f407e !important; /* Brand Dark */
+  font-weight: 900 !important;
+  background-color: transparent !important;
+}
+
+/* --- DARK MODE OVERRIDES --- */
+html.dark .react-datepicker {
+  background-color: #25282c !important; 
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+html.dark .react-datepicker__header {
+  background-color: transparent !important;
+  border-bottom-color: #334155 !important;
+}
+
+html.dark .react-datepicker__current-month,
+html.dark .react-datepicker-year-header,
+html.dark .react-datepicker__day-name,
+html.dark .react-datepicker__day {
+  color: #f8fafc !important;
+}
+
+html.dark .react-datepicker__day:hover {
+  background-color: #334155 !important;
+}
+
+html.dark .react-datepicker__day--selected {
+  background-color: #b3bbea !important; /* Brand Light */
+  color: #191b19 !important; /* Brand Black Text */
 }

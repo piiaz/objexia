@@ -1,0 +1,101 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 1. User Account (Updated for Auth)
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  password  String?   // Optional because Google users won't have a password
+  firstName String
+  lastName  String?
+  jobTitle  String?
+  avatarUrl String?
+  age       String?
+  gender    String?
+  
+  // --- AUTH FIELDS ---
+  provider   String?   @default("email") // 'email' or 'google'
+  isVerified Boolean   @default(false)
+  otp        String?   // 6-digit code
+  otpExpiry  DateTime? // Expiry time
+  
+  createdAt DateTime  @default(now())
+  
+  roadmaps  Roadmap[]
+}
+
+// 2. The Roadmap Container
+model Roadmap {
+  id          String   @id @default(uuid())
+  order Int @default(0)
+  title       String
+  description String?
+  avatarUrl   String?
+  createdAt   DateTime @default(now())
+  lastEdited  DateTime @updatedAt
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  lanes       Lane[]
+  items       Item[]
+  milestones  Milestone[]
+  
+  startDate   String?  
+  endDate     String?
+  timeView     String   @default("Month") // "Quarter" | "Month" | "Week"
+  showWeekends Boolean  @default(false)
+
+  @@unique([userId, title])
+}
+
+// 3. Tracks/Lanes
+model Lane {
+  id        String   @id @default(uuid())
+  title     String
+  color     String
+  type      String   // 'lane' or 'milestone'
+  order     Int      @default(0) 
+  
+  roadmapId String
+  roadmap   Roadmap  @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+}
+
+// 4. Objectives/Items
+model Item {
+  id          String   @id @default(uuid())
+  title       String
+  startDate   String
+  endDate     String
+  progress    Int      @default(0)
+  description String?
+  trackIndex  Int      @default(0)
+  
+  groupId     String   // Links to a Lane ID
+  
+  roadmapId   String
+  roadmap     Roadmap  @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+}
+
+// 5. Milestones
+model Milestone {
+  id          String   @id @default(uuid())
+  title       String
+  date        String
+  icon        String
+  color       String
+  trackIndex  Int      @default(0)
+  
+  groupId     String
+  
+  roadmapId   String
+  roadmap     Roadmap  @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+}
