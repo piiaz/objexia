@@ -30,6 +30,7 @@ import RoadmapItem from './RoadmapItem'
 import MilestoneItem from './MilestoneItem'
 import SortableSidebar from './SortableSidebar' 
 import ItemEditorModal from './ItemEditorModal' 
+import ShareModal from './ShareModal' // <--- IMPORTED SHARE MODAL
 import { 
   ITEM_GAP, TOP_PADDING, MILESTONE_STACK_HEIGHT, BASE_ROW_HEIGHT, 
   HEADER_MAIN_HEIGHT, HEADER_SUB_HEIGHT, Group, Milestone, Item, 
@@ -62,6 +63,7 @@ export default function Timeline({ roadmapId }: Props) {
   const [roadmapTitle, setRoadmapTitle] = useState('Loading...')
   const [isLoading, setIsLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false) // <--- ADDED STATE FOR SHARE MODAL
   const [laneManagerMode, setLaneManagerMode] = useState<'add' | 'manage' | null>(null)
   const [editingLaneId, setEditingLaneId] = useState<string | null>(null)
   const [editingItem, setEditingItem] = useState<Item | null>(null) 
@@ -107,25 +109,20 @@ export default function Timeline({ roadmapId }: Props) {
       }
   }, [roadmapId]);
 
-  // --- COMMAND PALETTE CONTEXT BROADCAST ---
   useEffect(() => {
     if (!isLoading && (items.length > 0 || milestones.length > 0 || groups.length > 0)) {
-        // Broadcoast context including Tracks (Groups) to the global Command Palette
         const event = new CustomEvent('objexia-roadmap-data', { 
             detail: { items, milestones, groups } 
         });
         window.dispatchEvent(event);
     }
     
-    // Clear context when leaving the roadmap
     return () => {
         window.dispatchEvent(new CustomEvent('objexia-roadmap-data', { 
             detail: { items: [], milestones: [], groups: [] } 
         }));
     };
   }, [items, milestones, groups, isLoading]);
-
-  
 
   const todayColumnIndex = useMemo(() => {
     const today = new Date();
@@ -186,14 +183,9 @@ export default function Timeline({ roadmapId }: Props) {
 
   useEffect(() => {
     const handleJumpTodayEvent = () => handleJumpToToday();
-    
-    // Listen for the custom event from Command Palette
     window.addEventListener('objexia-jump-today', handleJumpTodayEvent);
-    
-    return () => {
-        window.removeEventListener('objexia-jump-today', handleJumpTodayEvent);
-    };
-}, [todayColumnIndex]); // Ensure dependency on column index
+    return () => { window.removeEventListener('objexia-jump-today', handleJumpTodayEvent); };
+  }, [todayColumnIndex]); 
 
   useEffect(() => {
     const savedSidebar = localStorage.getItem('objexia_sidebar_state');
@@ -382,27 +374,22 @@ export default function Timeline({ roadmapId }: Props) {
   const renderMainHeaders = () => {
     if (timeView === 'Quarter') {
         const quarters = eachQuarterOfInterval({ start: roadmapStart, end: roadmapEnd }); return quarters.map((q, i) => { const qStart = startOfQuarter(q) < roadmapStart ? roadmapStart : startOfQuarter(q); const qEnd = endOfQuarter(q) > roadmapEnd ? roadmapEnd : endOfQuarter(q); const daysSpan = differenceInDays(qEnd, qStart) + 1; const colStart = differenceInDays(qStart, roadmapStart) + 2; if (daysSpan <= 0) return null; const styles = getLineStyles(qStart, timeView, i === 0); 
-        // UPGRADED: Changed z-40 to z-[110]
-        return ( <div key={i} className={`flex items-center px-2 font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px] ${styles.border} h-[48px] sticky top-0 z-[110] bg-white/95 dark:bg-[#191b19]/95 backdrop-blur-sm truncate`} style={{ gridColumnStart: colStart, gridColumnEnd: `span ${daysSpan}`, gridRow: 1 }}> <span className={`sticky left-[${sidebarWidth + 10}px] transition-all duration-500`}>{format(q, 'QQQ yyyy')}</span> </div> ) })
+        return ( <div key={i} className={`flex items-center px-2 font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest text-[11px] ${styles.border} border-b border-slate-200 dark:border-slate-800 h-[48px] sticky top-0 z-[110] bg-white dark:bg-[#191b19] truncate shadow-sm`} style={{ gridColumnStart: colStart, gridColumnEnd: `span ${daysSpan}`, gridRow: 1 }}> <span className={`sticky left-[${sidebarWidth + 10}px] transition-all duration-500`}>{format(q, 'QQQ yyyy')}</span> </div> ) })
     }
     const months = eachMonthOfInterval({ start: roadmapStart, end: roadmapEnd }); return months.map((m, i) => { const mStart = startOfMonth(m) < roadmapStart ? roadmapStart : startOfMonth(m); const mEnd = endOfMonth(m) > roadmapEnd ? roadmapEnd : endOfMonth(m); const daysSpan = differenceInDays(mEnd, mStart) + 1; const colStart = differenceInDays(mStart, roadmapStart) + 2; if (daysSpan <= 0) return null; const styles = getLineStyles(mStart, timeView, i === 0); 
-    // UPGRADED: Changed z-40 to z-[110]
-    return ( <div key={i} className={`flex items-center px-4 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px] ${styles.border} h-[48px] sticky top-0 z-[110] bg-white/95 dark:bg-[#191b19]/95 backdrop-blur-sm`} style={{ gridColumnStart: colStart, gridColumnEnd: `span ${daysSpan}`, gridRow: 1 }}> <span className={`sticky left-[${sidebarWidth + 10}px] whitespace-nowrap transition-all duration-500`}>{format(m, 'MMMM yyyy')}</span> </div> ) })
+    return ( <div key={i} className={`flex items-center px-4 font-bold text-slate-600 dark:text-slate-300 uppercase tracking-widest text-[11px] ${styles.border} border-b border-slate-200 dark:border-slate-800 h-[48px] sticky top-0 z-[110] bg-white dark:bg-[#191b19] shadow-sm`} style={{ gridColumnStart: colStart, gridColumnEnd: `span ${daysSpan}`, gridRow: 1 }}> <span className={`sticky left-[${sidebarWidth + 10}px] whitespace-nowrap transition-all duration-500`}>{format(m, 'MMMM yyyy')}</span> </div> ) })
   }
   
   const renderMiddleHeaders = () => {
     if (timeView === 'Month') return null;
     if (timeView === 'Quarter') { const months = eachMonthOfInterval({ start: roadmapStart, end: roadmapEnd }); return months.map((m, i) => { const mStart = startOfMonth(m) < roadmapStart ? roadmapStart : startOfMonth(m); const mEnd = endOfMonth(m) > roadmapEnd ? roadmapEnd : endOfMonth(m); const daysSpan = differenceInDays(mEnd, mStart) + 1; const colStart = differenceInDays(mStart, roadmapStart) + 2; if (daysSpan <= 0) return null; const isFirst = i === 0 && mStart.getDate() === roadmapStart.getDate(); const borderClass = isFirst ? 'border-l border-transparent' : 'border-l border-slate-300 dark:border-slate-700'; 
-    // UPGRADED: Changed z-40 to z-[105]
-    return ( <div key={`qm-${i}`} className={`flex items-center px-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-800/30 ${borderClass} sticky top-[48px] z-[115]`} style={{ gridColumnStart: colStart, gridColumnEnd: `span ${daysSpan}`, gridRow: 2 }}> <span className={`sticky left-[${sidebarWidth + 10}px] whitespace-nowrap transition-all duration-500`}>{format(m, 'MMMM')}</span> </div> ) }) }
+    return ( <div key={`qm-${i}`} className={`flex items-center px-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-[#1e2126] ${borderClass} border-b border-slate-200 dark:border-slate-800 sticky top-[48px] z-[115] h-[32px]`} style={{ gridColumnStart: colStart, gridColumnEnd: `span ${daysSpan}`, gridRow: 2 }}> <span className={`sticky left-[${sidebarWidth + 10}px] whitespace-nowrap transition-all duration-500`}>{format(m, 'MMMM')}</span> </div> ) }) }
     if (timeView === 'Week') { const months = eachMonthOfInterval({ start: roadmapStart, end: roadmapEnd }); const weekElements: any[] = []; months.forEach((m) => { const daysInMonth = getDaysInMonth(m); const ranges = [{ start: 1, end: 7 }, { start: 8, end: 14 }, { start: 15, end: 21 }, { start: 22, end: 28 }, { start: 29, end: daysInMonth }]; ranges.forEach((range, idx) => { const startD = setDate(m, range.start); const endD = setDate(m, range.end); if (isAfter(startD, roadmapEnd) || isBefore(endD, roadmapStart)) return; const effectiveStart = isBefore(startD, roadmapStart) ? roadmapStart : startD; const effectiveEnd = isAfter(endD, roadmapEnd) ? roadmapEnd : endD; const daysSpan = differenceInDays(effectiveEnd, effectiveStart) + 1; const colStart = differenceInDays(effectiveStart, roadmapStart) + 2; if (daysSpan <= 0) return; const label = `Week ${idx + 1}`; const borderClass = range.start === 1 ? 'border-l border-slate-300 dark:border-slate-700' : 'border-l border-slate-200 dark:border-slate-800'; const finalBorder = (idx === 0 && isSameMonth(effectiveStart, roadmapStart) && effectiveStart.getDate() === roadmapStart.getDate()) ? 'border-l border-transparent' : borderClass; 
-    // UPGRADED: Changed z-40 to z-[105]
-    weekElements.push( <div key={`wk-${m.toString()}-${range.start}`} className={`flex items-center px-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-800/30 ${finalBorder} sticky top-[48px] z-[115]`} style={{ gridColumnStart: colStart, gridColumnEnd: `span ${daysSpan}`, gridRow: 2 }}> <span className={`sticky left-[${sidebarWidth + 10}px] whitespace-nowrap transition-all duration-500`}>{label}</span> </div> ); }); }); return weekElements; }
+    weekElements.push( <div key={`wk-${m.toString()}-${range.start}`} className={`flex items-center px-4 text-[10px] font-bold text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-[#1e2126] ${finalBorder} border-b border-slate-200 dark:border-slate-800 sticky top-[48px] z-[115] h-[32px]`} style={{ gridColumnStart: colStart, gridColumnEnd: `span ${daysSpan}`, gridRow: 2 }}> <span className={`sticky left-[${sidebarWidth + 10}px] whitespace-nowrap transition-all duration-500`}>{label}</span> </div> ); }); }); return weekElements; }
   }
   
-  const renderSubHeaders = () => { const row = isThreeRowHeader ? 3 : 2; const stickyTop = isThreeRowHeader ? 'top-[80px]' : 'top-[48px]'; const days = eachDayOfInterval({ start: roadmapStart, end: roadmapEnd }); return days.map((d, i) => { const colStart = i + 2; const styles = getLineStyles(d, timeView, i === 0); const label = timeView === 'Quarter' ? format(d, 'd') : (timeView === 'Month' ? format(d, 'd EEE') : format(d, 'EEE d')); const headerBg = (styles.bg.includes('bg-slate-100') || styles.bg.includes('bg-[#22252a]')) ? styles.bg : 'bg-white dark:bg-[#191b19]'; 
-  // UPGRADED: Changed z-40 to z-[100]
-  return ( <div key={`d-${i}`} className={`flex items-center justify-center text-[9px] font-medium text-slate-500 dark:text-slate-400 ${styles.border} ${headerBg} h-[32px] sticky z-[120] whitespace-nowrap overflow-hidden px-1`} style={{ gridColumnStart: colStart, gridColumnEnd: `span 1`, gridRow: row, top: stickyTop }}> {label} </div> ) }) }
+  const renderSubHeaders = () => { const row = isThreeRowHeader ? 3 : 2; const stickyTop = isThreeRowHeader ? 'top-[80px]' : 'top-[48px]'; const days = eachDayOfInterval({ start: roadmapStart, end: roadmapEnd }); return days.map((d, i) => { const colStart = i + 2; const styles = getLineStyles(d, timeView, i === 0); const label = timeView === 'Quarter' ? format(d, 'd') : (timeView === 'Month' ? format(d, 'd EEE') : format(d, 'EEE d')); const isWeekend = styles.bg !== ''; const headerBg = isWeekend ? 'bg-slate-100 dark:bg-[#22252a]' : 'bg-white dark:bg-[#191b19]'; 
+  return ( <div key={`d-${i}`} className={`flex items-center justify-center text-[9px] font-bold text-slate-500 dark:text-slate-400 ${styles.border} border-b-2 border-slate-200 dark:border-slate-700 ${headerBg} h-[32px] sticky ${stickyTop} z-[120] whitespace-nowrap overflow-hidden px-1 shadow-sm`} style={{ gridColumnStart: colStart, gridColumnEnd: `span 1`, gridRow: row }}> {label} </div> ) }) }
 
   const headerCSS = isThreeRowHeader ? `${HEADER_MAIN_HEIGHT}px ${HEADER_SUB_HEIGHT}px ${HEADER_SUB_HEIGHT}px` : `${HEADER_MAIN_HEIGHT}px ${HEADER_SUB_HEIGHT}px`;
   const gridRowsCSS = `${headerCSS} ${groups.map(g => `${layout.groupHeights[g.id]}px`).join(' ')} 80px`; 
@@ -502,6 +489,16 @@ export default function Timeline({ roadmapId }: Props) {
                 </button>
                 <input type="file" ref={fileInputRef} onChange={handleFileChange} hidden accept=".csv" />
           </div>
+
+          {/* --- NEW SHARE BUTTON --- */}
+          <button 
+              onClick={() => checkAuth(() => setIsShareModalOpen(true))} 
+              className="p-2.5 rounded-xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center gap-2 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors shadow-sm"
+          >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+              Share
+          </button>
+
           <ThemeToggle />
           {user && (<Link href={`/profile?from=/roadmap/${roadmapId}`}><div className="w-9 h-9 rounded-full bg-[#b3bbea] dark:bg-[#3f407e] border-2 border-white dark:border-slate-700 shadow-sm overflow-hidden hover:scale-110 transition-transform">{user.avatarUrl ? <img src={user.avatarUrl} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-xs font-bold text-[#3f407e] dark:text-white">{user.firstName[0]}</div>}</div></Link>)}
           
@@ -577,34 +574,40 @@ export default function Timeline({ roadmapId }: Props) {
                                 transition: "grid-template-columns 0.5s cubic-bezier(0.4, 0, 0.2, 1)"
                             }}
                         >
+                            {/* Base Background */}
                             <div className="bg-white dark:bg-[#191b19]" style={{ gridColumn: '1 / -1', gridRow: `1 / ${groups.length + headerRowsCount + 1}`, zIndex: -1 }} />
-                            {/* UPGRADED: Changed z-40 to z-[60] */}
+                            
+                            {/* Fixed Sticky Sidebar Background Strip */}
                             <div className="sticky left-0 z-[60] bg-white dark:bg-[#191b19] border-r border-slate-100 dark:border-slate-800" style={{ gridColumn: 1, gridRow: `1 / ${groups.length + headerRowsCount + 1}` }} />
                             
-                            <div style={{ display: 'contents' }}> 
-                                {/* UPGRADED: Changed z-50 to z-[130] */}
-                                <div className="sticky left-0 top-0 z-[130] bg-white dark:bg-[#191b19] border-b border-r border-slate-100 dark:border-slate-800 h-[48px] flex items-center justify-center text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider overflow-hidden" style={{ gridColumn: 1, gridRow: 1 }}>{sidebarOpen ? cornerLabels.top : ''}</div> 
+                            {/* --- ROW 1: MAIN HEADER --- */}
+                            <>
+                                <div className="sticky left-0 top-0 z-[130] bg-white dark:bg-[#191b19] border-b border-r border-slate-200 dark:border-slate-800 h-[48px] flex items-center justify-center text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider overflow-hidden shadow-sm" style={{ gridColumn: 1, gridRow: 1 }}>{sidebarOpen ? cornerLabels.top : ''}</div> 
                                 {renderMainHeaders()} 
-                            </div>
-                            {isThreeRowHeader && ( 
-                                <div style={{ display: 'contents' }}> 
-                                    {/* UPGRADED: Changed z-50 to z-[130] */}
-                                    <div className="sticky left-0 top-[48px] z-[130] bg-slate-50 dark:bg-[#191b19] border-b border-r border-slate-200 dark:border-slate-800 h-[32px] flex items-center justify-center text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider overflow-hidden" style={{ gridColumn: 1, gridRow: 2 }}> {sidebarOpen ? (cornerLabels as any).middle : ''} </div> 
-                                    {renderMiddleHeaders()} 
-                                </div> 
-                            )}
-                            <div style={{ display: 'contents' }}> 
-                                {/* UPGRADED: Changed z-50 to z-[130] */}
-                                <div className={`sticky left-0 z-[130] bg-slate-50 dark:bg-[#191b19] border-b border-r border-slate-200 dark:border-slate-800 h-[32px] flex items-center justify-center text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider overflow-hidden ${isThreeRowHeader ? 'top-[80px]' : 'top-[48px]'}`} style={{ gridColumn: 1, gridRow: isThreeRowHeader ? 3 : 2 }}>{sidebarOpen ? (cornerLabels as any).bottom : ''}</div> 
-                                {renderSubHeaders()} 
-                            </div>
+                            </>
                             
+                            {/* --- ROW 2: MIDDLE HEADER (Conditional) --- */}
+                            {isThreeRowHeader && ( 
+                                <> 
+                                    <div className="sticky left-0 top-[48px] z-[130] bg-slate-50 dark:bg-[#1e2126] border-b border-r border-slate-200 dark:border-slate-800 h-[32px] flex items-center justify-center text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider overflow-hidden" style={{ gridColumn: 1, gridRow: 2 }}> {sidebarOpen ? (cornerLabels as any).middle : ''} </div> 
+                                    {renderMiddleHeaders()} 
+                                </> 
+                            )}
+                            
+                            {/* --- ROW 3: SUB HEADER --- */}
+                            <> 
+                                <div className={`sticky left-0 z-[130] bg-white dark:bg-[#191b19] border-b-2 border-r border-slate-200 dark:border-slate-700 h-[32px] flex items-center justify-center text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider overflow-hidden shadow-sm ${isThreeRowHeader ? 'top-[80px]' : 'top-[48px]'}`} style={{ gridColumn: 1, gridRow: isThreeRowHeader ? 3 : 2 }}>{sidebarOpen ? (cornerLabels as any).bottom : ''}</div> 
+                                {renderSubHeaders()} 
+                            </>
+                            
+                            {/* Grid Lines */}
                             {Array.from({ length: totalDays }).map((_, i) => { const currentDay = addDays(roadmapStart, i); const styles = getLineStyles(currentDay, timeView, i === 0); return (<div key={i} className={`border-l ${styles.border} ${styles.bg} transition-colors duration-500 ease-in-out pointer-events-none z-[1]`} style={{ gridColumn: i + 2, gridRow: `${styles.rowStart} / ${groups.length + headerRowsCount + 1}` }} />); })}
 
+                            {/* Today Indicator */}
                             {todayColumnIndex && (
                                 <div
                                     ref={todayRef}
-                                    className="pointer-events-none z-[140] relative h-full w-full"
+                                    className="pointer-events-none z-[105] relative h-full w-full"
                                     style={{ gridColumn: `${todayColumnIndex} / span 1`, gridRow: `1 / ${groups.length + headerRowsCount + 2}` }}
                                 >
                                     <div className="absolute left-1/2 -translate-x-1/2 h-full w-[2px] bg-[#3f407e] dark:bg-[#b3bbea] shadow-[0_0_15px_rgba(63,64,126,0.8)] dark:shadow-[0_0_20px_rgba(179,184,234,0.9)] animate-pulse">
@@ -613,6 +616,7 @@ export default function Timeline({ roadmapId }: Props) {
                                 </div>
                             )}
 
+                            {/* Tracks and Items */}
                             <SortableContext items={groups.map(g => g.id)} strategy={verticalListSortingStrategy}>
                             {groups.map((group, index) => {
                                 const currentRow = index + (isThreeRowHeader ? 4 : 3);
@@ -656,6 +660,7 @@ export default function Timeline({ roadmapId }: Props) {
                             )})}
                             </SortableContext>
                             
+                            {/* Track Addition Button row */}
                             <motion.div layout="position" transition={{ type: "spring", stiffness: 400, damping: 40 }} className="sticky left-0 z-50 flex items-center justify-center px-4 py-4 overflow-hidden" style={{ gridColumn: 1, gridRow: groups.length + headerRowsCount + 1, height: '80px' }}>
                                 {sidebarOpen && ( 
                                     <div className="flex w-full min-w-[200px] items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm backdrop-blur-sm"> 
@@ -678,6 +683,7 @@ export default function Timeline({ roadmapId }: Props) {
       <LaneManagerModal isOpen={laneManagerMode !== null} mode={laneManagerMode || 'manage'} onClose={() => { setLaneManagerMode(null); setEditingLaneId(null); }} groups={groups} onCreateLane={handleCreateLane} onUpdateLane={handleUpdateLane} onDeleteLane={handleDeleteLane} onReorderLanes={handleReorderLanes} onEditLane={handleEditLane} editGroupId={editingLaneId} items={items} milestones={milestones} />
       <AuthBarrierModal isOpen={isAuthBarrierOpen} onClose={() => setIsAuthBarrierOpen(false)} />
       <ConfirmModal isOpen={importConfirmOpen} onClose={() => setImportConfirmOpen(false)} onConfirm={confirmImport} title="Overwrite Roadmap?" message="Importing this file will replace all current data with the contents of the CSV. This action cannot be undone." confirmText="Yes, Import & Overwrite" isDangerous={true} />
+      <ShareModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} roadmapId={roadmapId} />
       
       <Toaster position="bottom-right" toastOptions={{ style: { background: '#333', color: '#fff', fontSize: '14px', borderRadius: '12px' } }} />
     </motion.div>

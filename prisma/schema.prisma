@@ -9,7 +9,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// 1. User Account (Updated for Auth)
+// 1. User Account (Updated for Auth & Collaboration)
 model User {
   id        String    @id @default(uuid())
   email     String    @unique
@@ -29,13 +29,14 @@ model User {
   
   createdAt DateTime  @default(now())
   
-  roadmaps  Roadmap[]
+  roadmaps       Roadmap[]
+  sharedRoadmaps RoadmapAccess[] // <--- ADDED: Reverse relation for collaboration
 }
 
 // 2. The Roadmap Container
 model Roadmap {
   id          String   @id @default(uuid())
-  order Int @default(0)
+  order       Int      @default(0)
   title       String
   description String?
   avatarUrl   String?
@@ -49,10 +50,12 @@ model Roadmap {
   items       Item[]
   milestones  Milestone[]
   
-  startDate   String?  
-  endDate     String?
+  startDate    String?  
+  endDate      String?
   timeView     String   @default("Month") // "Quarter" | "Month" | "Week"
   showWeekends Boolean  @default(false)
+  
+  collaborators RoadmapAccess[] // <--- ADDED: Links to the access table
 
   @@unique([userId, title])
 }
@@ -98,4 +101,29 @@ model Milestone {
   
   roadmapId   String
   roadmap     Roadmap  @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+}
+
+// --- NEW COLLABORATION MODELS ---
+
+// Add this new Enum for Roles
+enum Role {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+// Add this new Model to link Users and Roadmaps
+model RoadmapAccess {
+  id        String   @id @default(uuid())
+  roadmapId String
+  userId    String
+  role      Role     @default(VIEWER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  roadmap   Roadmap  @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // A user can only have one specific role per roadmap
+  @@unique([roadmapId, userId]) 
 }
