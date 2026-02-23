@@ -15,7 +15,7 @@ import {
 import { 
   SortableContext, verticalListSortingStrategy, arrayMove 
 } from '@dnd-kit/sortable' 
-import { motion } from 'framer-motion' 
+import { motion, AnimatePresence } from 'framer-motion' 
 import toast, { Toaster } from 'react-hot-toast' 
 
 import { useAuth } from '../context/AuthContext' 
@@ -107,6 +107,26 @@ export default function Timeline({ roadmapId }: Props) {
       }
   }, [roadmapId]);
 
+  // --- COMMAND PALETTE CONTEXT BROADCAST ---
+  useEffect(() => {
+    if (!isLoading && (items.length > 0 || milestones.length > 0 || groups.length > 0)) {
+        // Broadcoast context including Tracks (Groups) to the global Command Palette
+        const event = new CustomEvent('objexia-roadmap-data', { 
+            detail: { items, milestones, groups } 
+        });
+        window.dispatchEvent(event);
+    }
+    
+    // Clear context when leaving the roadmap
+    return () => {
+        window.dispatchEvent(new CustomEvent('objexia-roadmap-data', { 
+            detail: { items: [], milestones: [], groups: [] } 
+        }));
+    };
+  }, [items, milestones, groups, isLoading]);
+
+  
+
   const todayColumnIndex = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -163,6 +183,17 @@ export default function Timeline({ roadmapId }: Props) {
     useSensor(PointerSensor, { activationConstraint: { distance: 5 }, disabled: !user }), 
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 }, disabled: !user })
   )
+
+  useEffect(() => {
+    const handleJumpTodayEvent = () => handleJumpToToday();
+    
+    // Listen for the custom event from Command Palette
+    window.addEventListener('objexia-jump-today', handleJumpTodayEvent);
+    
+    return () => {
+        window.removeEventListener('objexia-jump-today', handleJumpTodayEvent);
+    };
+}, [todayColumnIndex]); // Ensure dependency on column index
 
   useEffect(() => {
     const savedSidebar = localStorage.getItem('objexia_sidebar_state');
@@ -226,17 +257,6 @@ export default function Timeline({ roadmapId }: Props) {
     const currentGroup = groups.find(g => g.id === id);
     if (!currentGroup) return;
     setGroups(prev => prev.map(g => g.id === id ? { ...g, ...data } : g));
-    if (data.type && data.type !== currentGroup.type) {
-        if (data.type === 'milestone') {
-            const itemsToDelete = items.filter(i => i.groupId === id);
-            setItems(prev => prev.filter(i => i.groupId !== id));
-            itemsToDelete.forEach(i => { fetch(`/api/items/${i.id}`, { method: 'DELETE' }).catch(console.error); });
-        } else {
-            const milestonesToDelete = milestones.filter(m => m.groupId === id);
-            setMilestones(prev => prev.filter(m => m.groupId !== id));
-            milestonesToDelete.forEach(m => { fetch(`/api/milestones/${m.id}`, { method: 'DELETE' }).catch(console.error); });
-        }
-    }
     try { await fetch(`/api/lanes/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); toast.success("Track updated"); } 
     catch (e) { console.error(e); toast.error("Failed to update track"); }
   }
@@ -361,18 +381,28 @@ export default function Timeline({ roadmapId }: Props) {
   
   const renderMainHeaders = () => {
     if (timeView === 'Quarter') {
-        const quarters = eachQuarterOfInterval({ start: roadmapStart, end: roadmapEnd }); return quarters.map((q, i) => { const qStart = startOfQuarter(q) < roadmapStart ? roadmapStart : startOfQuarter(q); const qEnd = endOfQuarter(q) > roadmapEnd ? roadmapEnd : endOfQuarter(q); const daysSpan = differenceInDays(qEnd, qStart) + 1; const colStart = differenceInDays(qStart, roadmapStart) + 2; if (daysSpan <= 0) return null; const styles = getLineStyles(qStart, timeView, i === 0); return ( <div key={i} className={`flex items-center px-2 font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px] ${styles.border} h-[48px] sticky top-0 z-40 bg-white/95 dark:bg-[#191b19]/95 backdrop-blur-sm truncate`} style={{ gridColumnStart: colStart, gridColumnEnd: `span ${daysSpan}`, gridRow: 1 }}> <span className={`sticky left-[${sidebarWidth + 10}px] transition-all duration-500`}>{format(q, 'QQQ yyyy')}</span> </div> ) })
+        const quarters = eachQuarterOfInterval({ start: roadmapStart, end: roadmapEnd }); return quarters.map((q, i) => { const qStart = startOfQuarter(q) < roadmapStart ? roadmapStart : startOfQuarter(q); const qEnd = endOfQuarter(q) > roadmapEnd ? roadmapEnd : endOfQuarter(q); const daysSpan = differenceInDays(qEnd, qStart) + 1; const colStart = differenceInDays(qStart, roadmapStart) + 2; if (daysSpan <= 0) return null; const styles = getLineStyles(qStart, timeView, i === 0); 
+        // UPGRADED: Changed z-40 to z-[110]
+        return ( <div key={i} className={`flex items-center px-2 font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px] ${styles.border} h-[48px] sticky top-0 z-[110] bg-white/95 dark:bg-[#191b19]/95 backdrop-blur-sm truncate`} style={{ gridColumnStart: colStart, gridColumnEnd: `span ${daysSpan}`, gridRow: 1 }}> <span className={`sticky left-[${sidebarWidth + 10}px] transition-all duration-500`}>{format(q, 'QQQ yyyy')}</span> </div> ) })
     }
-    const months = eachMonthOfInterval({ start: roadmapStart, end: roadmapEnd }); return months.map((m, i) => { const mStart = startOfMonth(m) < roadmapStart ? roadmapStart : startOfMonth(m); const mEnd = endOfMonth(m) > roadmapEnd ? roadmapEnd : endOfMonth(m); const daysSpan = differenceInDays(mEnd, mStart) + 1; const colStart = differenceInDays(mStart, roadmapStart) + 2; if (daysSpan <= 0) return null; const styles = getLineStyles(mStart, timeView, i === 0); return ( <div key={i} className={`flex items-center px-4 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px] ${styles.border} h-[48px] sticky top-0 z-40 bg-white/95 dark:bg-[#191b19]/95 backdrop-blur-sm`} style={{ gridColumnStart: colStart, gridColumnEnd: `span ${daysSpan}`, gridRow: 1 }}> <span className={`sticky left-[${sidebarWidth + 10}px] whitespace-nowrap transition-all duration-500`}>{format(m, 'MMMM yyyy')}</span> </div> ) })
+    const months = eachMonthOfInterval({ start: roadmapStart, end: roadmapEnd }); return months.map((m, i) => { const mStart = startOfMonth(m) < roadmapStart ? roadmapStart : startOfMonth(m); const mEnd = endOfMonth(m) > roadmapEnd ? roadmapEnd : endOfMonth(m); const daysSpan = differenceInDays(mEnd, mStart) + 1; const colStart = differenceInDays(mStart, roadmapStart) + 2; if (daysSpan <= 0) return null; const styles = getLineStyles(mStart, timeView, i === 0); 
+    // UPGRADED: Changed z-40 to z-[110]
+    return ( <div key={i} className={`flex items-center px-4 font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-[10px] ${styles.border} h-[48px] sticky top-0 z-[110] bg-white/95 dark:bg-[#191b19]/95 backdrop-blur-sm`} style={{ gridColumnStart: colStart, gridColumnEnd: `span ${daysSpan}`, gridRow: 1 }}> <span className={`sticky left-[${sidebarWidth + 10}px] whitespace-nowrap transition-all duration-500`}>{format(m, 'MMMM yyyy')}</span> </div> ) })
   }
   
   const renderMiddleHeaders = () => {
     if (timeView === 'Month') return null;
-    if (timeView === 'Quarter') { const months = eachMonthOfInterval({ start: roadmapStart, end: roadmapEnd }); return months.map((m, i) => { const mStart = startOfMonth(m) < roadmapStart ? roadmapStart : startOfMonth(m); const mEnd = endOfMonth(m) > roadmapEnd ? roadmapEnd : endOfMonth(m); const daysSpan = differenceInDays(mEnd, mStart) + 1; const colStart = differenceInDays(mStart, roadmapStart) + 2; if (daysSpan <= 0) return null; const isFirst = i === 0 && mStart.getDate() === roadmapStart.getDate(); const borderClass = isFirst ? 'border-l border-transparent' : 'border-l border-slate-300 dark:border-slate-700'; return ( <div key={`qm-${i}`} className={`flex items-center px-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-800/30 ${borderClass} sticky top-[48px] z-40`} style={{ gridColumnStart: colStart, gridColumnEnd: `span ${daysSpan}`, gridRow: 2 }}> <span className={`sticky left-[${sidebarWidth + 10}px] whitespace-nowrap transition-all duration-500`}>{format(m, 'MMMM')}</span> </div> ) }) }
-    if (timeView === 'Week') { const months = eachMonthOfInterval({ start: roadmapStart, end: roadmapEnd }); const weekElements: any[] = []; months.forEach((m) => { const daysInMonth = getDaysInMonth(m); const ranges = [{ start: 1, end: 7 }, { start: 8, end: 14 }, { start: 15, end: 21 }, { start: 22, end: 28 }, { start: 29, end: daysInMonth }]; ranges.forEach((range, idx) => { const startD = setDate(m, range.start); const endD = setDate(m, range.end); if (isAfter(startD, roadmapEnd) || isBefore(endD, roadmapStart)) return; const effectiveStart = isBefore(startD, roadmapStart) ? roadmapStart : startD; const effectiveEnd = isAfter(endD, roadmapEnd) ? roadmapEnd : endD; const daysSpan = differenceInDays(effectiveEnd, effectiveStart) + 1; const colStart = differenceInDays(effectiveStart, roadmapStart) + 2; if (daysSpan <= 0) return; const label = `Week ${idx + 1}`; const borderClass = range.start === 1 ? 'border-l border-slate-300 dark:border-slate-700' : 'border-l border-slate-200 dark:border-slate-800'; const finalBorder = (idx === 0 && isSameMonth(effectiveStart, roadmapStart) && effectiveStart.getDate() === roadmapStart.getDate()) ? 'border-l border-transparent' : borderClass; weekElements.push( <div key={`wk-${m.toString()}-${range.start}`} className={`flex items-center px-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-800/30 ${finalBorder} sticky top-[48px] z-40`} style={{ gridColumnStart: colStart, gridColumnEnd: `span ${daysSpan}`, gridRow: 2 }}> <span className={`sticky left-[${sidebarWidth + 10}px] whitespace-nowrap transition-all duration-500`}>{label}</span> </div> ); }); }); return weekElements; }
+    if (timeView === 'Quarter') { const months = eachMonthOfInterval({ start: roadmapStart, end: roadmapEnd }); return months.map((m, i) => { const mStart = startOfMonth(m) < roadmapStart ? roadmapStart : startOfMonth(m); const mEnd = endOfMonth(m) > roadmapEnd ? roadmapEnd : endOfMonth(m); const daysSpan = differenceInDays(mEnd, mStart) + 1; const colStart = differenceInDays(mStart, roadmapStart) + 2; if (daysSpan <= 0) return null; const isFirst = i === 0 && mStart.getDate() === roadmapStart.getDate(); const borderClass = isFirst ? 'border-l border-transparent' : 'border-l border-slate-300 dark:border-slate-700'; 
+    // UPGRADED: Changed z-40 to z-[105]
+    return ( <div key={`qm-${i}`} className={`flex items-center px-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-800/30 ${borderClass} sticky top-[48px] z-[115]`} style={{ gridColumnStart: colStart, gridColumnEnd: `span ${daysSpan}`, gridRow: 2 }}> <span className={`sticky left-[${sidebarWidth + 10}px] whitespace-nowrap transition-all duration-500`}>{format(m, 'MMMM')}</span> </div> ) }) }
+    if (timeView === 'Week') { const months = eachMonthOfInterval({ start: roadmapStart, end: roadmapEnd }); const weekElements: any[] = []; months.forEach((m) => { const daysInMonth = getDaysInMonth(m); const ranges = [{ start: 1, end: 7 }, { start: 8, end: 14 }, { start: 15, end: 21 }, { start: 22, end: 28 }, { start: 29, end: daysInMonth }]; ranges.forEach((range, idx) => { const startD = setDate(m, range.start); const endD = setDate(m, range.end); if (isAfter(startD, roadmapEnd) || isBefore(endD, roadmapStart)) return; const effectiveStart = isBefore(startD, roadmapStart) ? roadmapStart : startD; const effectiveEnd = isAfter(endD, roadmapEnd) ? roadmapEnd : endD; const daysSpan = differenceInDays(effectiveEnd, effectiveStart) + 1; const colStart = differenceInDays(effectiveStart, roadmapStart) + 2; if (daysSpan <= 0) return; const label = `Week ${idx + 1}`; const borderClass = range.start === 1 ? 'border-l border-slate-300 dark:border-slate-700' : 'border-l border-slate-200 dark:border-slate-800'; const finalBorder = (idx === 0 && isSameMonth(effectiveStart, roadmapStart) && effectiveStart.getDate() === roadmapStart.getDate()) ? 'border-l border-transparent' : borderClass; 
+    // UPGRADED: Changed z-40 to z-[105]
+    weekElements.push( <div key={`wk-${m.toString()}-${range.start}`} className={`flex items-center px-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-800/30 ${finalBorder} sticky top-[48px] z-[115]`} style={{ gridColumnStart: colStart, gridColumnEnd: `span ${daysSpan}`, gridRow: 2 }}> <span className={`sticky left-[${sidebarWidth + 10}px] whitespace-nowrap transition-all duration-500`}>{label}</span> </div> ); }); }); return weekElements; }
   }
   
-  const renderSubHeaders = () => { const row = isThreeRowHeader ? 3 : 2; const stickyTop = isThreeRowHeader ? 'top-[80px]' : 'top-[48px]'; const days = eachDayOfInterval({ start: roadmapStart, end: roadmapEnd }); return days.map((d, i) => { const colStart = i + 2; const styles = getLineStyles(d, timeView, i === 0); const label = timeView === 'Quarter' ? format(d, 'd') : (timeView === 'Month' ? format(d, 'd EEE') : format(d, 'EEE d')); const headerBg = (styles.bg.includes('bg-slate-100') || styles.bg.includes('bg-[#22252a]')) ? styles.bg : 'bg-white dark:bg-[#191b19]'; return ( <div key={`d-${i}`} className={`flex items-center justify-center text-[9px] font-medium text-slate-500 dark:text-slate-400 ${styles.border} ${headerBg} h-[32px] sticky z-40 whitespace-nowrap overflow-hidden px-1`} style={{ gridColumnStart: colStart, gridColumnEnd: `span 1`, gridRow: row, top: stickyTop }}> {label} </div> ) }) }
+  const renderSubHeaders = () => { const row = isThreeRowHeader ? 3 : 2; const stickyTop = isThreeRowHeader ? 'top-[80px]' : 'top-[48px]'; const days = eachDayOfInterval({ start: roadmapStart, end: roadmapEnd }); return days.map((d, i) => { const colStart = i + 2; const styles = getLineStyles(d, timeView, i === 0); const label = timeView === 'Quarter' ? format(d, 'd') : (timeView === 'Month' ? format(d, 'd EEE') : format(d, 'EEE d')); const headerBg = (styles.bg.includes('bg-slate-100') || styles.bg.includes('bg-[#22252a]')) ? styles.bg : 'bg-white dark:bg-[#191b19]'; 
+  // UPGRADED: Changed z-40 to z-[100]
+  return ( <div key={`d-${i}`} className={`flex items-center justify-center text-[9px] font-medium text-slate-500 dark:text-slate-400 ${styles.border} ${headerBg} h-[32px] sticky z-[120] whitespace-nowrap overflow-hidden px-1`} style={{ gridColumnStart: colStart, gridColumnEnd: `span 1`, gridRow: row, top: stickyTop }}> {label} </div> ) }) }
 
   const headerCSS = isThreeRowHeader ? `${HEADER_MAIN_HEIGHT}px ${HEADER_SUB_HEIGHT}px ${HEADER_SUB_HEIGHT}px` : `${HEADER_MAIN_HEIGHT}px ${HEADER_SUB_HEIGHT}px`;
   const gridRowsCSS = `${headerCSS} ${groups.map(g => `${layout.groupHeights[g.id]}px`).join(' ')} 80px`; 
@@ -381,9 +411,8 @@ export default function Timeline({ roadmapId }: Props) {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col h-[100dvh] w-full bg-white dark:bg-[#191b19] font-sans overflow-hidden transition-colors">
       
       {/* --- TOP NAVBAR --- */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between px-6 py-4 gap-4 border-b border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-[#191b19]/80 backdrop-blur-md z-[60] relative">
+      <header className="flex flex-col md:flex-row md:items-center justify-between px-6 py-4 gap-4 border-b border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-[#191b19]/70 backdrop-blur-xl backdrop-saturate-150 z-[150] relative">
         <div className="flex flex-wrap items-center gap-4">
-          
           <button 
             onClick={toggleSidebar} 
             className="p-2 -ml-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-all duration-300"
@@ -407,7 +436,7 @@ export default function Timeline({ roadmapId }: Props) {
           
           <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700">
             <ObjexiaLogo className="w-8 h-8" />
-            <h1 className="text-xl font-extrabold truncate max-w-[200px] text-slate-900 dark:text-white">{roadmapTitle}</h1>
+            <h1 className="text-xl font-extrabold truncate max-w-[200px] text-slate-900 dark:text-white leading-tight tracking-tight">{roadmapTitle}</h1>
           </div>
           
           <DateRangeSelector 
@@ -438,7 +467,6 @@ export default function Timeline({ roadmapId }: Props) {
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
             </button>
 
-            {/* --- JUMP TO TODAY BUTTON --- */}
             <motion.button 
                 onClick={handleJumpToToday}
                 animate={shakeButton ? { x: [0, -5, 5, -5, 5, 0] } : {}}
@@ -459,9 +487,9 @@ export default function Timeline({ roadmapId }: Props) {
                     <line x1="20" y1="12" x2="22" y2="12"></line>
                 </svg>
             </motion.button>
-
           </div>
         </div>
+
         <div className="flex items-center gap-3">
           <div className="hidden md:flex gap-2">
                 <button onClick={handleExport} className="p-2.5 rounded-lg border border-transparent hover:border-slate-200 dark:hover:border-slate-600 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-400 flex items-center gap-2 transition-colors">
@@ -473,129 +501,181 @@ export default function Timeline({ roadmapId }: Props) {
                     Import
                 </button>
                 <input type="file" ref={fileInputRef} onChange={handleFileChange} hidden accept=".csv" />
-            </div>
-          <ThemeToggle />
-          {user && (<Link href={`/profile?from=/roadmap/${roadmapId}`}><div className="w-9 h-9 rounded-full bg-[#b3bbea] dark:bg-[#3f407e] border-2 border-white dark:border-slate-700 shadow-sm overflow-hidden">{user.avatarUrl ? <img src={user.avatarUrl} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-xs font-bold text-[#3f407e] dark:text-white">{user.firstName[0]}</div>}</div></Link>)}
-          <button onClick={openNewItemModal} className="px-5 py-2.5 bg-[#3f407e] text-white rounded-lg font-bold text-sm shadow-lg flex items-center gap-2 hover:bg-[#323366] transition-colors"> <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M12 5v14M5 12h14"/></svg> New </button>
-        </div>
-      </div>
-
-      <DndContext onDragEnd={handleDragEnd} sensors={sensors} collisionDetection={closestCenter}>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} ref={containerRef} className="flex-1 overflow-auto relative bg-slate-50/50 dark:bg-[#191b19]">
-          
-          <div 
-            className="grid min-w-max" 
-            style={{ 
-                gridTemplateColumns: `${sidebarWidth}px repeat(${totalDays}, ${columnWidth}px)`, 
-                gridTemplateRows: gridRowsCSS,
-                transition: "grid-template-columns 0.5s cubic-bezier(0.4, 0, 0.2, 1)"
-            }}
-          >
-            
-            <div className="bg-white dark:bg-[#191b19]" style={{ gridColumn: '1 / -1', gridRow: `1 / ${groups.length + headerRowsCount + 1}`, zIndex: -1 }} />
-            <div className="sticky left-0 z-40 bg-white dark:bg-[#191b19] border-r border-slate-100 dark:border-slate-800" style={{ gridColumn: 1, gridRow: `1 / ${groups.length + headerRowsCount + 1}` }} />
-            
-            <div style={{ display: 'contents' }}> <div className="sticky left-0 top-0 z-50 bg-white dark:bg-[#191b19] border-b border-r border-slate-100 dark:border-slate-800 h-[48px] flex items-center justify-center text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider overflow-hidden" style={{ gridColumn: 1, gridRow: 1 }}>{sidebarOpen ? cornerLabels.top : ''}</div> {renderMainHeaders()} </div>
-            {isThreeRowHeader && ( <div style={{ display: 'contents' }}> <div className="sticky left-0 top-[48px] z-50 bg-slate-50 dark:bg-[#191b19] border-b border-r border-slate-200 dark:border-slate-800 h-[32px] flex items-center justify-center text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider overflow-hidden" style={{ gridColumn: 1, gridRow: 2 }}> {sidebarOpen ? (cornerLabels as any).middle : ''} </div> {renderMiddleHeaders()} </div> )}
-            <div style={{ display: 'contents' }}> <div className={`sticky left-0 z-50 bg-slate-50 dark:bg-[#191b19] border-b border-r border-slate-200 dark:border-slate-800 h-[32px] flex items-center justify-center text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider overflow-hidden ${isThreeRowHeader ? 'top-[80px]' : 'top-[48px]'}`} style={{ gridColumn: 1, gridRow: isThreeRowHeader ? 3 : 2 }}>{sidebarOpen ? (cornerLabels as any).bottom : ''}</div> {renderSubHeaders()} </div>
-            
-            {Array.from({ length: totalDays }).map((_, i) => { const currentDay = addDays(roadmapStart, i); const styles = getLineStyles(currentDay, timeView, i === 0); return (<div key={i} className={`border-l ${styles.border} ${styles.bg} transition-colors duration-500 ease-in-out pointer-events-none z-[1]`} style={{ gridColumn: i + 2, gridRow: `${styles.rowStart} / ${groups.length + headerRowsCount + 1}` }} />); })}
-
-            {/* --- CENTERED "TODAY" LINE WITH LASER GLOW --- */}
-            {todayColumnIndex && (
-                <div
-                    ref={todayRef}
-                    className="pointer-events-none z-30 relative group h-full w-full"
-                    style={{
-                        gridColumn: `${todayColumnIndex} / span 1`, 
-                        gridRow: `1 / ${groups.length + headerRowsCount + 2}`, 
-                    }}
-                >
-                    {/* The Laser Beam (Centered) */}
-                    <div className="absolute left-1/2 -translate-x-1/2 h-full w-[2px] bg-[#3f407e] dark:bg-[#b3bbea] shadow-[0_0_15px_rgba(63,64,126,0.8)] dark:shadow-[0_0_20px_rgba(179,187,234,0.9)] animate-pulse">
-                        <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-[#3f407e] dark:from-[#b3bbea] to-transparent opacity-50"></div>
-                    </div>
-                </div>
-            )}
-
-            <SortableContext items={groups.map(g => g.id)} strategy={verticalListSortingStrategy}>
-            {groups.map((group, index) => {
-                const currentRow = index + (isThreeRowHeader ? 4 : 3);
-                const isMilestoneRow = group.type === 'milestone';
-                return (
-                <div key={group.id} style={{ display: 'contents' }}>
-                  <DroppableLane groupId={group.id} height={layout.groupHeights[group.id]} rowIndex={index} headerRows={headerRowsCount} />
-                  
-                  {/* --- NEW: PASSED laneHeight HERE --- */}
-                  <SortableSidebar 
-                    group={group} 
-                    sidebarOpen={sidebarOpen} 
-                    isMilestoneRow={isMilestoneRow} 
-                    gridRow={currentRow} 
-                    onEdit={() => handleEditLane(group)} 
-                    laneHeight={layout.groupHeights[group.id]} 
-                  />
-
-                  <div className="border-b border-slate-100 dark:border-slate-800/80 col-span-full pointer-events-none" style={{ gridRow: currentRow, gridColumn: '2 / -1' }} />
-                  {isMilestoneRow ? (
-                    <>
-                      {Array.from({ length: totalDays }).map((_, i) => ( <div key={`mc-${group.id}-${i}`} onClick={() => handleMilestoneClick(i, group.id)} className="row-span-1 hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors cursor-crosshair z-5" style={{ gridColumn: i + 2, gridRow: currentRow }} /> ))}
-                      {milestones.filter(m => m.groupId === group.id).map(m => ( <MilestoneItem key={m.id} milestone={m} roadmapStart={roadmapStart} roadmapEnd={roadmapEnd} onClick={handleEditMilestone} rowIndex={index} trackIndex={layout.visualPositions[m.id] || 0} headerRows={headerRowsCount} isWeekly={isWeekly} stackHeight={milestoneStackHeight} timeView={timeView} /> ))}
-                    </>
-                  ) : (
-                    items.filter(item => item.groupId === group.id).map((item) => ( 
-                      <RoadmapItem 
-                        key={item.id} 
-                        item={item} 
-                        roadmapStart={roadmapStart} 
-                        roadmapEnd={roadmapEnd} 
-                        groups={groups} 
-                        onClick={handleItemClick} 
-                        rowIndex={index} 
-                        computedTrackIndex={layout.visualPositions[item.id] || 0} 
-                        headerRows={headerRowsCount} 
-                        timeView={timeView} 
-                        itemHeight={VIEW_ITEM_HEIGHTS[timeView]}
-                        sidebarWidth={sidebarWidth}
-                      /> 
-                    ))
-                  )}
-                </div>
-            )})}
-            </SortableContext>
-            
-            <motion.div layout="position" transition={{ type: "spring", stiffness: 400, damping: 40 }} className="sticky left-0 z-50 flex items-center justify-center px-4 py-4 overflow-hidden" style={{ gridColumn: 1, gridRow: groups.length + headerRowsCount + 1, height: '80px' }}>
-                {sidebarOpen && ( 
-                    <div className="flex w-full min-w-[200px] items-center gap-2 p-1 bg-slate-100 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm"> 
-                        <button onClick={() => checkAuth(() => { setEditingLaneId(null); setLaneManagerMode('add'); })} className="flex-1 flex items-center justify-center gap-2 py-2 px-3 bg-white dark:bg-[#3f407e] text-[#3f407e] dark:text-white rounded-lg shadow-sm hover:shadow-md transition-all font-bold text-xs border border-slate-200 dark:border-[#3f407e]"> <span className="text-lg leading-none">+</span> <span>Track</span> </button> 
-                        <div className="w-[1px] h-6 bg-slate-300 dark:bg-slate-600"></div>
-                        <button onClick={() => checkAuth(() => { setEditingLaneId(null); setLaneManagerMode('manage'); })} className="p-2 text-slate-500 dark:text-slate-400 hover:text-[#3f407e] dark:hover:text-white hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-all" title="Manage Structure"> <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg> </button> 
-                    </div> 
-                )}
-            </motion.div>
-            
-            <motion.div layout="position" transition={{ type: "spring", stiffness: 400, damping: 40 }} className="border-t border-slate-100 dark:border-slate-800 pointer-events-none z-10" style={{ gridRow: groups.length + headerRowsCount + 1, gridColumn: '2 / -1' }} />
           </div>
-        </motion.div>
-      </DndContext>
+          <ThemeToggle />
+          {user && (<Link href={`/profile?from=/roadmap/${roadmapId}`}><div className="w-9 h-9 rounded-full bg-[#b3bbea] dark:bg-[#3f407e] border-2 border-white dark:border-slate-700 shadow-sm overflow-hidden hover:scale-110 transition-transform">{user.avatarUrl ? <img src={user.avatarUrl} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-xs font-bold text-[#3f407e] dark:text-white">{user.firstName[0]}</div>}</div></Link>)}
+          
+          <button 
+            onClick={openNewItemModal} 
+            className="
+                relative overflow-hidden group
+                px-5 py-2.5 rounded-xl font-bold text-sm
+                bg-[#3f407e] text-white
+                shadow-[0_4px_14px_0_rgb(63,64,126,0.39)] 
+                hover:shadow-[0_6px_20px_rgba(63,64,126,0.23)] 
+                hover:-translate-y-[1px]
+                active:scale-95 active:shadow-inner
+                transition-all duration-200 ease-out
+            "
+            >
+            <span className="relative z-10 flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                <path d="M12 5v14M5 12h14"/>
+                </svg> 
+                New 
+            </span>
+            <div className="absolute inset-0 h-full w-full bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
+          </button>
+        </div>
+      </header>
+
+      {/* --- MAIN CONTENT AREA --- */}
+      <div className="flex-1 overflow-hidden relative bg-slate-50/50 dark:bg-[#191b19]">
+        <AnimatePresence mode="wait">
+            {isLoading ? (
+                <motion.div 
+                    key="timeline-skeleton"
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="flex-1 flex flex-col overflow-hidden animate-pulse h-full"
+                >
+                    <div className="h-[48px] w-full border-b border-slate-200 dark:border-slate-800 flex bg-white/50 dark:bg-[#191b19]/50">
+                        <div className="w-[260px] border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50" />
+                        <div className="flex-1" />
+                    </div>
+                    <div className="flex-1 flex">
+                        <div className="w-[260px] border-r border-slate-200 dark:border-slate-800 p-4 space-y-4 bg-white dark:bg-[#191b19]">
+                            {[...Array(5)].map((_, i) => (
+                                <div key={i} className="h-24 w-full bg-slate-100 dark:bg-slate-800/50 rounded-xl" />
+                            ))}
+                        </div>
+                        <div className="flex-1 relative bg-slate-50/30 dark:bg-[#0f1117] p-8">
+                            <div className="absolute inset-0 flex">
+                                {[...Array(10)].map((_, i) => (
+                                    <div key={i} className="flex-1 border-l border-slate-100 dark:border-slate-800/50" />
+                                ))}
+                            </div>
+                            <div className="relative space-y-20">
+                                <div className="h-10 w-1/3 bg-slate-200/50 dark:bg-slate-800/30 rounded-full ml-10" />
+                                <div className="h-10 w-1/2 bg-slate-200/50 dark:bg-slate-800/30 rounded-full ml-40" />
+                                <div className="h-10 w-1/4 bg-slate-200/50 dark:bg-slate-800/30 rounded-full ml-20" />
+                            </div>
+                        </div>
+                    </div>
+                </motion.div>
+            ) : (
+                <DndContext onDragEnd={handleDragEnd} sensors={sensors} collisionDetection={closestCenter}>
+                    <motion.div 
+                        key="timeline-content"
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                        ref={containerRef} className="h-full w-full overflow-auto relative"
+                    >
+                        <div 
+                            className="grid min-w-max" 
+                            style={{ 
+                                gridTemplateColumns: `${sidebarWidth}px repeat(${totalDays}, ${columnWidth}px)`, 
+                                gridTemplateRows: gridRowsCSS,
+                                transition: "grid-template-columns 0.5s cubic-bezier(0.4, 0, 0.2, 1)"
+                            }}
+                        >
+                            <div className="bg-white dark:bg-[#191b19]" style={{ gridColumn: '1 / -1', gridRow: `1 / ${groups.length + headerRowsCount + 1}`, zIndex: -1 }} />
+                            {/* UPGRADED: Changed z-40 to z-[60] */}
+                            <div className="sticky left-0 z-[60] bg-white dark:bg-[#191b19] border-r border-slate-100 dark:border-slate-800" style={{ gridColumn: 1, gridRow: `1 / ${groups.length + headerRowsCount + 1}` }} />
+                            
+                            <div style={{ display: 'contents' }}> 
+                                {/* UPGRADED: Changed z-50 to z-[130] */}
+                                <div className="sticky left-0 top-0 z-[130] bg-white dark:bg-[#191b19] border-b border-r border-slate-100 dark:border-slate-800 h-[48px] flex items-center justify-center text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider overflow-hidden" style={{ gridColumn: 1, gridRow: 1 }}>{sidebarOpen ? cornerLabels.top : ''}</div> 
+                                {renderMainHeaders()} 
+                            </div>
+                            {isThreeRowHeader && ( 
+                                <div style={{ display: 'contents' }}> 
+                                    {/* UPGRADED: Changed z-50 to z-[130] */}
+                                    <div className="sticky left-0 top-[48px] z-[130] bg-slate-50 dark:bg-[#191b19] border-b border-r border-slate-200 dark:border-slate-800 h-[32px] flex items-center justify-center text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider overflow-hidden" style={{ gridColumn: 1, gridRow: 2 }}> {sidebarOpen ? (cornerLabels as any).middle : ''} </div> 
+                                    {renderMiddleHeaders()} 
+                                </div> 
+                            )}
+                            <div style={{ display: 'contents' }}> 
+                                {/* UPGRADED: Changed z-50 to z-[130] */}
+                                <div className={`sticky left-0 z-[130] bg-slate-50 dark:bg-[#191b19] border-b border-r border-slate-200 dark:border-slate-800 h-[32px] flex items-center justify-center text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider overflow-hidden ${isThreeRowHeader ? 'top-[80px]' : 'top-[48px]'}`} style={{ gridColumn: 1, gridRow: isThreeRowHeader ? 3 : 2 }}>{sidebarOpen ? (cornerLabels as any).bottom : ''}</div> 
+                                {renderSubHeaders()} 
+                            </div>
+                            
+                            {Array.from({ length: totalDays }).map((_, i) => { const currentDay = addDays(roadmapStart, i); const styles = getLineStyles(currentDay, timeView, i === 0); return (<div key={i} className={`border-l ${styles.border} ${styles.bg} transition-colors duration-500 ease-in-out pointer-events-none z-[1]`} style={{ gridColumn: i + 2, gridRow: `${styles.rowStart} / ${groups.length + headerRowsCount + 1}` }} />); })}
+
+                            {todayColumnIndex && (
+                                <div
+                                    ref={todayRef}
+                                    className="pointer-events-none z-[140] relative h-full w-full"
+                                    style={{ gridColumn: `${todayColumnIndex} / span 1`, gridRow: `1 / ${groups.length + headerRowsCount + 2}` }}
+                                >
+                                    <div className="absolute left-1/2 -translate-x-1/2 h-full w-[2px] bg-[#3f407e] dark:bg-[#b3bbea] shadow-[0_0_15px_rgba(63,64,126,0.8)] dark:shadow-[0_0_20px_rgba(179,184,234,0.9)] animate-pulse">
+                                        <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-[#3f407e] dark:from-[#b3bbea] to-transparent opacity-50" />
+                                    </div>
+                                </div>
+                            )}
+
+                            <SortableContext items={groups.map(g => g.id)} strategy={verticalListSortingStrategy}>
+                            {groups.map((group, index) => {
+                                const currentRow = index + (isThreeRowHeader ? 4 : 3);
+                                const isMilestoneRow = group.type === 'milestone';
+                                return (
+                                <div key={group.id} style={{ display: 'contents' }}>
+                                    <DroppableLane groupId={group.id} height={layout.groupHeights[group.id]} rowIndex={index} headerRows={headerRowsCount} />
+                                    <SortableSidebar 
+                                        group={group} 
+                                        sidebarOpen={sidebarOpen} 
+                                        isMilestoneRow={isMilestoneRow} 
+                                        gridRow={currentRow} 
+                                        onEdit={() => handleEditLane(group)} 
+                                        laneHeight={layout.groupHeights[group.id]} 
+                                    />
+                                    <div className="border-b border-slate-100 dark:border-slate-800/80 col-span-full pointer-events-none" style={{ gridRow: currentRow, gridColumn: '2 / -1' }} />
+                                    {isMilestoneRow ? (
+                                        <>
+                                        {Array.from({ length: totalDays }).map((_, i) => ( <div key={`mc-${group.id}-${i}`} onClick={() => handleMilestoneClick(i, group.id)} className="row-span-1 hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors cursor-crosshair z-5" style={{ gridColumn: i + 2, gridRow: currentRow }} /> ))}
+                                        {milestones.filter(m => m.groupId === group.id).map(m => ( <MilestoneItem key={m.id} milestone={m} roadmapStart={roadmapStart} roadmapEnd={roadmapEnd} onClick={handleEditMilestone} rowIndex={index} trackIndex={layout.visualPositions[m.id] || 0} headerRows={headerRowsCount} isWeekly={isWeekly} stackHeight={milestoneStackHeight} timeView={timeView} /> ))}
+                                        </>
+                                    ) : (
+                                        items.filter(item => item.groupId === group.id).map((item) => ( 
+                                        <RoadmapItem 
+                                            key={item.id} 
+                                            item={item} 
+                                            roadmapStart={roadmapStart} 
+                                            roadmapEnd={roadmapEnd} 
+                                            groups={groups} 
+                                            onClick={handleItemClick} 
+                                            rowIndex={index} 
+                                            computedTrackIndex={layout.visualPositions[item.id] || 0} 
+                                            headerRows={headerRowsCount} 
+                                            timeView={timeView as any} 
+                                            itemHeight={VIEW_ITEM_HEIGHTS[timeView]}
+                                            sidebarWidth={sidebarWidth}
+                                        /> 
+                                        ))
+                                    )}
+                                </div>
+                            )})}
+                            </SortableContext>
+                            
+                            <motion.div layout="position" transition={{ type: "spring", stiffness: 400, damping: 40 }} className="sticky left-0 z-50 flex items-center justify-center px-4 py-4 overflow-hidden" style={{ gridColumn: 1, gridRow: groups.length + headerRowsCount + 1, height: '80px' }}>
+                                {sidebarOpen && ( 
+                                    <div className="flex w-full min-w-[200px] items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm backdrop-blur-sm"> 
+                                        <button onClick={() => checkAuth(() => { setEditingLaneId(null); setLaneManagerMode('add'); })} className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 bg-white dark:bg-[#3f407e] text-[#3f407e] dark:text-white rounded-lg shadow-sm hover:shadow-md transition-all font-bold text-xs border border-slate-200 dark:border-[#3f407e] active:scale-95"> <span className="text-lg leading-none">+</span> <span>Track</span> </button> 
+                                        <div className="w-[1px] h-6 bg-slate-300 dark:bg-slate-600" />
+                                        <button onClick={() => checkAuth(() => { setEditingLaneId(null); setLaneManagerMode('manage'); })} className="p-2.5 text-slate-500 dark:text-slate-400 hover:text-[#3f407e] dark:hover:text-white hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-all" title="Manage Structure"> <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg> </button> 
+                                    </div> 
+                                )}
+                            </motion.div>
+                            <div className="border-t border-slate-100 dark:border-slate-800 pointer-events-none z-10" style={{ gridRow: groups.length + headerRowsCount + 1, gridColumn: '2 / -1' }} />
+                        </div>
+                    </motion.div>
+                </DndContext>
+            )}
+        </AnimatePresence>
+      </div>
       
+      {/* --- MODALS --- */}
       <ItemEditorModal isOpen={isModalOpen || milestoneModalOpen} onClose={() => { setIsModalOpen(false); setMilestoneModalOpen(false); setEditingItem(null); setCurrentMilestoneData(null); }} groups={groups} editObjective={editingItem} onSaveObjective={handleSaveItem} onDeleteObjective={handleDeleteItem} editMilestone={currentMilestoneData} onSaveMilestone={handleSaveMilestone} onDeleteMilestone={handleDeleteMilestone} />
-      
-      <LaneManagerModal 
-        isOpen={laneManagerMode !== null} 
-        mode={laneManagerMode || 'manage'} 
-        onClose={() => { setLaneManagerMode(null); setEditingLaneId(null); }} 
-        groups={groups} 
-        onCreateLane={handleCreateLane} 
-        onUpdateLane={handleUpdateLane} 
-        onDeleteLane={handleDeleteLane} 
-        onReorderLanes={handleReorderLanes} 
-        onEditLane={handleEditLane}
-        editGroupId={editingLaneId} 
-        items={items} 
-        milestones={milestones} 
-      />
-      
+      <LaneManagerModal isOpen={laneManagerMode !== null} mode={laneManagerMode || 'manage'} onClose={() => { setLaneManagerMode(null); setEditingLaneId(null); }} groups={groups} onCreateLane={handleCreateLane} onUpdateLane={handleUpdateLane} onDeleteLane={handleDeleteLane} onReorderLanes={handleReorderLanes} onEditLane={handleEditLane} editGroupId={editingLaneId} items={items} milestones={milestones} />
       <AuthBarrierModal isOpen={isAuthBarrierOpen} onClose={() => setIsAuthBarrierOpen(false)} />
       <ConfirmModal isOpen={importConfirmOpen} onClose={() => setImportConfirmOpen(false)} onConfirm={confirmImport} title="Overwrite Roadmap?" message="Importing this file will replace all current data with the contents of the CSV. This action cannot be undone." confirmText="Yes, Import & Overwrite" isDangerous={true} />
       

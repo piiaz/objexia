@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, League_Spartan } from "next/font/google"; // Import League Spartan
+import { Geist, Geist_Mono, League_Spartan } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "./context/AuthContext";
+import CommandPalette from "./components/CommandPalette"; // <--- ADDED IMPORT
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,12 +32,19 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="scroll-smooth">
       <body
-        // Add the variable here ---------------------------v
-        className={`${geistSans.variable} ${geistMono.variable} ${leagueSpartan.variable} antialiased bg-slate-50 dark:bg-[#191b19] text-[#191b19] dark:text-slate-100`}
+        className={`
+          ${geistSans.variable} ${geistMono.variable} ${leagueSpartan.variable} 
+          antialiased bg-slate-50 dark:bg-[#121417] 
+          text-slate-900 dark:text-slate-100
+          selection:bg-[#3f407e]/20
+        `}
       >
         <AuthProvider>
+            {/* THE COMMAND PALETTE: Accessible via Cmd+K or Ctrl+K anywhere */}
+            <CommandPalette />
+            
             {children}
         </AuthProvider>
       </body>

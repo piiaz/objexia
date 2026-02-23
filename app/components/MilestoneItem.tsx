@@ -16,10 +16,13 @@ type Props = {
   headerRows: number
   isWeekly?: boolean
   stackHeight?: number
-  timeView: 'Quarter' | 'Month' | 'Week' // Received prop
+  timeView: 'Quarter' | 'Month' | 'Week' 
 }
 
-export default function MilestoneItem({ milestone, roadmapStart, roadmapEnd, onClick, rowIndex, trackIndex, headerRows, isWeekly = false, stackHeight = MILESTONE_STACK_HEIGHT, timeView }: Props) {
+export default function MilestoneItem({ 
+    milestone, roadmapStart, roadmapEnd, onClick, rowIndex, 
+    trackIndex, headerRows, isWeekly = false, stackHeight = MILESTONE_STACK_HEIGHT, timeView 
+}: Props) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: milestone.id })
   
   const [mousePos, setMousePos] = useState<{ x: string | number, isHovering: boolean }>({ x: '50%', isHovering: false })
@@ -55,21 +58,26 @@ export default function MilestoneItem({ milestone, roadmapStart, roadmapEnd, onC
     gridColumnStart: dayIndex + 2,
     gridRowStart: rowStart,
     marginTop: `${topOffset}px`, 
-    zIndex: (transform || isDragging) ? 999 : (mousePos.isHovering ? 50 : 30), 
+    // --- UPGRADED Z-INDEX LOGIC ---
+    // Dragging: 1000
+    // Hover: 125 (Higher than Day headers @ 120, Lower than Sidebar @ 130)
+    // Default: 30
+    zIndex: (transform || isDragging) ? 1000 : (mousePos.isHovering ? 125 : 30), 
     touchAction: 'none' as const
   }
 
   const innerStyle = {
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0) scale(1.1) rotate(3deg)` : undefined,
+    transition: transform ? 'none' : 'transform 0.2s cubic-bezier(0.2, 0, 0, 1)',
   }
 
-  // --- ADAPTIVE ICON SIZING ---
   const iconSize = timeView === 'Quarter' ? "16" : (timeView === 'Month' ? "18" : "24");
   const padding = timeView === 'Quarter' ? 'p-0.5' : (timeView === 'Month' ? 'p-1' : 'p-2');
   const textSize = timeView === 'Quarter' ? 'text-[9px]' : (timeView === 'Month' ? 'text-[10px]' : 'text-[11px]');
 
   return (
     <motion.div
+      id={milestone.id} // Targeted by Command Palette
       layout={enableLayoutAnim ? "position" : false}
       transition={{ type: "spring", stiffness: 400, damping: 40 }}
       style={wrapperStyle}
@@ -102,9 +110,9 @@ export default function MilestoneItem({ milestone, roadmapStart, roadmapEnd, onC
           style={innerStyle}
       >
           <div className={`
-              ${colorClass} mb-1 rounded-full bg-white shadow-sm border border-slate-100
-              group-hover:scale-110 group-hover:shadow-md transition-all duration-200
-              ${isDragging ? 'scale-125 shadow-xl' : ''}
+              ${colorClass} mb-1 rounded-full bg-white border border-slate-100 dark:border-slate-700
+              group-hover:scale-110 transition-all duration-200
+              ${isDragging ? 'shadow-[0_15px_30px_rgba(0,0,0,0.3)] ring-2 ring-current ring-offset-2 ring-offset-white dark:ring-offset-[#191b19]' : 'shadow-sm group-hover:shadow-md'}
               ${padding}
           `}>
               <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="currentColor" stroke="none">
@@ -113,15 +121,17 @@ export default function MilestoneItem({ milestone, roadmapStart, roadmapEnd, onC
           </div>
           
           <div className={`
-              font-bold text-slate-600 uppercase tracking-wide whitespace-nowrap 
-              bg-white/90 rounded-md shadow-sm border border-slate-100 backdrop-blur-sm 
-              -ml-px pointer-events-none transform transition-transform group-hover:-translate-y-0.5
-              ${textSize} px-2 py-0.5
+              font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wide whitespace-nowrap 
+              bg-white/95 dark:bg-slate-800/95 rounded-md shadow-sm border border-slate-200 dark:border-slate-700 backdrop-blur-sm 
+              pointer-events-none transform transition-all duration-200
+              ${isDragging ? 'shadow-xl text-current' : 'group-hover:-translate-y-0.5'}
+              ${textSize} px-2.5 py-1
           `}>
               {milestone.title}
           </div>
           
-          <div className={`w-[1px] h-[100vh] border-l border-dashed border-slate-300 absolute top-[30px] pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity`} />
+          {/* Guide Line */}
+          <div className={`w-[1px] h-[100vh] border-l-2 border-dashed border-slate-300 dark:border-slate-700 absolute top-[30px] pointer-events-none opacity-0 transition-opacity ${isDragging ? 'opacity-50' : 'group-hover:opacity-100'}`} />
       </div>
     </motion.div>
   )

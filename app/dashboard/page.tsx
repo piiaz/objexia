@@ -5,9 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { formatDistanceToNow, format } from 'date-fns'
-// --- 1. ADD DragEndEvent ---
 import { DndContext, closestCenter, useSensor, useSensors, PointerSensor, TouchSensor, DragEndEvent } from '@dnd-kit/core'
-// --- 2. ADD arrayMove ---
 import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Toaster, toast } from 'react-hot-toast'
@@ -29,19 +27,39 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-function SortableRoadmapCard({ map, onDelete, onEdit }: { map: RoadmapMeta, onDelete: (id: string) => void, onEdit: (map: RoadmapMeta) => void }) {
+// --- UPGRADED: Added `index` for staggered animations ---
+function SortableRoadmapCard({ map, index, onDelete, onEdit }: { map: RoadmapMeta, index: number, onDelete: (id: string) => void, onEdit: (map: RoadmapMeta) => void }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: map.id })
-    const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 50 : 1, opacity: isDragging ? 0.8 : 1 }
+    const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 50 : 1 }
 
     return (
         <div ref={setNodeRef} style={style} className="h-full">
-            <motion.div layoutId={map.id} className={`group relative bg-white dark:bg-[#1e2126] rounded-2xl border ${isDragging ? 'border-[#3f407e] shadow-2xl scale-105' : 'border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl hover:border-[#3f407e]/30 dark:hover:border-[#b3bbea]/30'} transition-all overflow-hidden flex flex-col h-full`}>
-                <div {...attributes} {...listeners} className="flex-1 p-6 cursor-grab active:cursor-grabbing touch-none">
+            <motion.div 
+                layoutId={map.id} 
+                // --- UPGRADED: Staggered entry animation ---
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: index * 0.08, type: 'spring', stiffness: 200, damping: 20 }}
+                className={`
+                    group relative bg-white/80 dark:bg-[#1e2126]/80 backdrop-blur-xl 
+                    rounded-2xl border flex flex-col h-full
+                    transition-all duration-300 ease-out
+                    ${isDragging 
+                        ? 'border-[#3f407e] shadow-2xl scale-105 z-50 brightness-110' 
+                        : 'border-slate-200/60 dark:border-slate-800/60 shadow-md hover:shadow-[0_20px_40px_-15px_rgba(63,64,126,0.15)] dark:hover:shadow-[0_20px_40px_-15px_rgba(179,187,234,0.05)] hover:-translate-y-2 hover:border-[#3f407e]/30 dark:hover:border-[#b3bbea]/30'
+                    }
+                    overflow-hidden
+                `}
+            >
+                {/* Subtle Hover Gradient Overlay */}
+                <div className="absolute inset-0 bg-gradient-to-br from-transparent to-slate-50 dark:to-slate-800/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+
+                <div {...attributes} {...listeners} className="flex-1 p-6 cursor-grab active:cursor-grabbing touch-none relative z-10">
                     <div className="flex justify-between items-start mb-4 gap-2">
                         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#3f407e] to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-purple-500/20 overflow-hidden border border-white/10 shrink-0">
                             {map.avatarUrl ? ( <img src={map.avatarUrl} alt="Icon" className="w-full h-full object-cover" /> ) : ( <span>{map.title[0].toUpperCase()}</span> )}
                         </div>
-                        <div className="flex flex-col items-end text-[9px] font-bold uppercase tracking-widest bg-slate-50 dark:bg-slate-800/50 px-2 py-1.5 rounded-md leading-tight whitespace-nowrap">
+                        <div className="flex flex-col items-end text-[9px] font-bold uppercase tracking-widest bg-slate-100/50 dark:bg-slate-800/50 px-2 py-1.5 rounded-md leading-tight whitespace-nowrap">
                             <span className="text-slate-400 mb-0.5">Created {format(new Date(map.createdAt), 'MMM d, yyyy')}</span>
                             <span className="text-[#3f407e] dark:text-[#b3bbea]">Edited {formatDistanceToNow(new Date(map.lastEdited))} ago</span>
                         </div>
@@ -49,10 +67,16 @@ function SortableRoadmapCard({ map, onDelete, onEdit }: { map: RoadmapMeta, onDe
                     <h3 className="text-xl font-bold mb-2 group-hover:text-[#3f407e] dark:group-hover:text-[#b3bbea] transition-colors line-clamp-1 truncate" title={map.title}>{map.title}</h3>
                     <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2 h-10 leading-relaxed">{map.description || "No description provided."}</p>
                 </div>
-                <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/30">
-                    <Link href={`/roadmap/${map.id}`} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#3f407e]/10 dark:bg-[#b3bbea]/10 text-[#3f407e] dark:text-[#b3bbea] font-bold text-xs hover:bg-[#3f407e] hover:text-white dark:hover:bg-[#b3bbea] dark:hover:text-slate-900 transition-all shadow-sm hover:shadow-md active:scale-95" onPointerDown={(e) => e.stopPropagation()}>
+
+                <div className="px-6 py-4 border-t border-slate-100/60 dark:border-slate-800/60 flex justify-between items-center bg-slate-50/30 dark:bg-slate-800/10 relative z-10">
+                    <Link 
+                        href={`/roadmap/${map.id}`} 
+                        className="group/btn flex items-center gap-2 px-4 py-2 rounded-lg bg-[#3f407e]/10 dark:bg-[#b3bbea]/10 text-[#3f407e] dark:text-[#b3bbea] font-bold text-xs hover:bg-[#3f407e] hover:text-white dark:hover:bg-[#b3bbea] dark:hover:text-slate-900 transition-all shadow-sm hover:shadow-md active:scale-95" 
+                        onPointerDown={(e) => e.stopPropagation()}
+                    >
                         <span>Open Board</span>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                        {/* Animated Arrow on Hover */}
+                        <svg className="transform group-hover/btn:translate-x-1 transition-transform" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                     </Link>
                     <div className="flex items-center gap-1">
                         <button onClick={() => onEdit(map)} onPointerDown={(e) => e.stopPropagation()} className="text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all p-2 rounded-lg" title="Edit Roadmap"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>
@@ -107,11 +131,20 @@ export default function Dashboard() {
 
   useEffect(() => { if (user?.id) fetchRoadmaps() }, [user])
 
-  // --- 3. ADD HANDLE DRAG END ---
+    useEffect(() => {
+    if (!isLoading && roadmaps.length > 0) {
+        window.dispatchEvent(new CustomEvent('objexia-roadmap-list', { 
+            detail: { roadmaps } 
+        }));
+    }
+    return () => {
+        window.dispatchEvent(new CustomEvent('objexia-roadmap-list', { detail: { roadmaps: [] } }));
+    };
+}, [roadmaps, isLoading]);
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
-        // 1. Update Local State (Optimistic)
         const oldIndex = roadmaps.findIndex((r) => r.id === active.id);
         const newIndex = roadmaps.findIndex((r) => r.id === over.id);
         
@@ -119,7 +152,6 @@ export default function Dashboard() {
             const newOrder = arrayMove(roadmaps, oldIndex, newIndex);
             setRoadmaps(newOrder);
 
-            // 2. Persist to Backend
             try {
                 const updates = newOrder.map((r, idx) => ({ id: r.id, order: idx }));
                 await fetch('/api/roadmaps/reorder', { 
@@ -161,7 +193,7 @@ export default function Dashboard() {
                 description: desc, 
                 avatarUrl, 
                 userId: user.id,
-                order: roadmaps.length // Add to end of list
+                order: roadmaps.length 
             })
         })
         const data = await res.json()
@@ -270,8 +302,9 @@ export default function Dashboard() {
   const handleRemoveIconCreate = () => setAvatarUrl('');
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#121417] text-slate-900 dark:text-slate-100 transition-colors">
-      <header className="sticky top-0 z-40 bg-white/80 dark:bg-[#191b19]/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-[#fafafa] dark:bg-[#121417] text-slate-900 dark:text-slate-100 transition-colors selection:bg-[#3f407e]/20">
+      {/* UPGRADED NAVBAR: Glassmorphism effect */}
+      <header className="sticky top-0 z-40 bg-white/70 dark:bg-[#191b19]/70 backdrop-blur-xl backdrop-saturate-150 border-b border-slate-200/50 dark:border-white/5 px-6 py-4 flex items-center justify-between shadow-sm">
        <div className="flex items-center gap-3">
          <ObjexiaLogo className="w-10 h-10" />
          <div className="flex flex-col">
@@ -281,30 +314,104 @@ export default function Dashboard() {
        </div>
        <div className="flex items-center gap-4">
          <ThemeToggle />
-         {user && <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700"> <Link href={`/profile?from=/dashboard`}> <div className="w-9 h-9 rounded-full bg-[#b3bbea] dark:bg-[#3f407e] border-2 border-white dark:border-slate-700 shadow-sm cursor-pointer overflow-hidden hover:scale-105 transition-transform"> {user.avatarUrl ? <img src={user.avatarUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[#3f407e] dark:text-[#b3bbea] font-bold text-xs">{user.firstName?.[0] || 'U'}</div>} </div> </Link> <button onClick={logout} className="text-xs font-bold text-red-500 hover:text-red-600 px-2">Log Out</button> </div>}
+         {user && <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700"> <Link href={`/profile?from=/dashboard`}> <div className="w-9 h-9 rounded-full bg-[#b3bbea] dark:bg-[#3f407e] border-2 border-white dark:border-slate-700 shadow-sm cursor-pointer overflow-hidden hover:scale-105 hover:shadow-md transition-all"> {user.avatarUrl ? <img src={user.avatarUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[#3f407e] dark:text-[#b3bbea] font-bold text-xs">{user.firstName?.[0] || 'U'}</div>} </div> </Link> <button
+  onClick={logout}
+  className="px-3 py-1.5 
+             border border-red-200/60 dark:border-red-900/40
+             text-red-600 dark:text-red-400
+             bg-red-50/60 dark:bg-red-900/20
+             backdrop-blur-sm
+             rounded-lg text-xs font-semibold
+             shadow-sm hover:shadow-md
+             hover:bg-red-100 dark:hover:bg-red-900/30
+             transition-all duration-200">
+  Sign Out
+</button> </div>}
        </div>
       </header>
 
       <main className="max-w-6xl mx-auto p-6 md:p-10">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
-            <div> <h1 className="text-3xl font-extrabold mb-2">My Roadmaps</h1> <p className="text-slate-500 dark:text-slate-400">Manage your product strategies in one place.</p> </div>
-            <button onClick={openCreate} className="px-6 py-3 bg-[#3f407e] hover:bg-[#323366] text-white font-bold rounded-xl shadow-lg shadow-[#3f407e]/20 flex items-center gap-2 transition-transform hover:-translate-y-0.5 active:scale-95"> <span>+ Create New Roadmap</span> </button>
-        </div>
+        <motion.div 
+            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
+            className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12"
+        >
+            <div> 
+                <h1 className="text-3xl font-extrabold mb-2 tracking-tight">My Roadmaps</h1> 
+                <p className="text-slate-500 dark:text-slate-400">Manage your product strategies in one place.</p> 
+            </div>
+            
+            {/* UPGRADED PREMIUM BUTTON */}
+            <button 
+                onClick={openCreate} 
+                className="
+                    relative overflow-hidden group
+                    px-6 py-3 rounded-xl font-bold text-sm
+                    bg-[#3f407e] text-white
+                    shadow-[0_4px_14px_0_rgb(63,64,126,0.39)] 
+                    hover:shadow-[0_6px_20px_rgba(63,64,126,0.23)] 
+                    hover:-translate-y-[1px]
+                    active:scale-95 active:shadow-inner
+                    transition-all duration-200 ease-out flex items-center gap-2
+                "
+            >
+                <span className="relative z-10 flex items-center gap-2">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M12 5v14M5 12h14"/></svg>
+                    Create New Roadmap
+                </span>
+                <div className="absolute inset-0 h-full w-full bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
+            </button>
+        </motion.div>
 
         {isLoading ? (
-            <div className="flex justify-center p-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#3f407e]"></div></div>
-        ) : roadmaps.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-3xl bg-slate-50/50 dark:bg-slate-800/30">
-                <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 text-slate-300 dark:text-slate-600"> <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg> </div>
-                <h3 className="text-xl font-bold text-slate-700 dark:text-slate-300 mb-2">No roadmaps yet</h3> <p className="text-slate-500 mb-8">Create your first roadmap to get started.</p>
-                <button onClick={openCreate} className="px-8 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-[#3f407e] dark:text-[#b3bbea] rounded-xl hover:shadow-lg transition-all">Create Roadmap</button>
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[...Array(6)].map((_, i) => (
+            <div key={i} className="bg-white/50 dark:bg-[#1e2126]/50 rounded-2xl border border-slate-200 dark:border-slate-800 h-[220px] p-6 animate-pulse">
+                <div className="flex justify-between mb-4">
+                    <div className="w-12 h-12 rounded-xl bg-slate-200 dark:bg-slate-800" />
+                    <div className="w-24 h-6 bg-slate-100 dark:bg-slate-800/50 rounded-md" />
+                </div>
+                <div className="w-3/4 h-6 bg-slate-200 dark:bg-slate-800 rounded-md mb-3" />
+                <div className="w-full h-4 bg-slate-100 dark:bg-slate-800/50 rounded-md mb-2" />
+                <div className="w-2/3 h-4 bg-slate-100 dark:bg-slate-800/50 rounded-md" />
+                <div className="mt-auto pt-6 border-t border-slate-100 dark:border-slate-800 flex justify-between">
+                    <div className="w-24 h-8 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                    <div className="w-16 h-8 bg-slate-100 dark:bg-slate-800/50 rounded-lg" />
+                </div>
             </div>
+        ))}
+    </div>        ) : roadmaps.length === 0 ? (
+            <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}
+                className="flex flex-col items-center justify-center py-24 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-3xl bg-slate-50/50 dark:bg-slate-800/30 backdrop-blur-sm"
+            >
+                <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 text-slate-300 dark:text-slate-600 shadow-inner"> <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg> </div>
+                <h3 className="text-xl font-bold text-slate-700 dark:text-slate-300 mb-2 tracking-tight">No roadmaps yet</h3> <p className="text-slate-500 mb-8">Create your first roadmap to get started.</p>
+                
+                {/* UPGRADED PREMIUM BUTTON (Empty State) */}
+                <button 
+                    onClick={openCreate} 
+                    className="
+                        relative overflow-hidden group
+                        px-8 py-3 rounded-xl font-bold
+                        bg-[#3f407e] text-white
+                        shadow-[0_4px_14px_0_rgb(63,64,126,0.39)] 
+                        hover:shadow-[0_6px_20px_rgba(63,64,126,0.23)] 
+                        hover:-translate-y-[1px]
+                        active:scale-95 active:shadow-inner
+                        transition-all duration-200 ease-out
+                    "
+                >
+                    <span className="relative z-10 flex items-center gap-2">Create Roadmap</span>
+                    <div className="absolute inset-0 h-full w-full bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
+                </button>
+            </motion.div>
         ) : (
-            // --- 4. ATTACH HANDLER HERE ---
             <DndContext onDragEnd={handleDragEnd} sensors={sensors} collisionDetection={closestCenter}>
                 <SortableContext items={roadmaps.map(r => r.id)} strategy={rectSortingStrategy}>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {roadmaps.map((map) => ( <SortableRoadmapCard key={map.id} map={map} onDelete={setDeleteId} onEdit={openEdit} /> ))}
+                        {roadmaps.map((map, index) => ( 
+                            <SortableRoadmapCard key={map.id} map={map} index={index} onDelete={setDeleteId} onEdit={openEdit} /> 
+                        ))}
                     </div>
                 </SortableContext>
             </DndContext>
@@ -313,18 +420,18 @@ export default function Dashboard() {
 
       <AnimatePresence>
         {isCreateModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsCreateModalOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-                <motion.form onSubmit={handleCreate} initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative bg-white dark:bg-[#1e2126] w-full max-w-lg p-8 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 overflow-hidden">
-                    <h2 className="text-2xl font-bold mb-6">Create Roadmap</h2>
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsCreateModalOpen(false)} className="absolute inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-sm" />
+                <motion.form onSubmit={handleCreate} initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} transition={{ type: 'spring', damping: 25, stiffness: 300 }} className="relative bg-white dark:bg-[#1e2126] w-full max-w-lg p-8 rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-700/50 overflow-hidden">
+                    <h2 className="text-2xl font-extrabold mb-6 tracking-tight">Create Roadmap</h2>
                     {formError && ( <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-sm text-red-600 dark:text-red-400 font-bold"> {formError} </div> )}
                     
                     <div className="mb-6 space-y-3">
                         <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Cover Image</label>
                         <div className="relative group cursor-pointer overflow-hidden" onClick={() => fileInputRef.current?.click()}>
-                            <div className={`w-full h-52 rounded-xl overflow-hidden border-2 flex items-center justify-center p-8 transition-all ${avatarUrl ? 'border-transparent' : 'border-dashed border-slate-300 dark:border-slate-700 hover:border-[#3f407e]/50 dark:hover:border-[#3f407e]/50'} bg-slate-50 dark:bg-slate-800/50`}>
+                            <div className={`w-full h-52 rounded-xl overflow-hidden border-2 flex items-center justify-center p-8 transition-all duration-300 ${avatarUrl ? 'border-transparent shadow-inner' : 'border-dashed border-slate-300 dark:border-slate-700 hover:border-[#3f407e]/50 dark:hover:border-[#3f407e]/50 hover:bg-slate-100 dark:hover:bg-slate-800'} bg-slate-50 dark:bg-slate-800/50`}>
                                 {avatarUrl ? (
-                                    <img src={avatarUrl} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                    <img src={avatarUrl} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                                 ) : (
                                     <div className="flex flex-col items-center gap-2 text-slate-400 dark:text-slate-500 group-hover:text-[#3f407e] dark:group-hover:text-[#b3bbea] transition-colors">
                                             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
@@ -334,7 +441,7 @@ export default function Dashboard() {
                                 )}
                             </div>
                             {avatarUrl && (
-                                <button type="button" onClick={(e) => {e.stopPropagation(); handleRemoveIconCreate();}} className="absolute top-4 right-4 p-2 bg-red-500 text-white rounded-full shadow-md hover:bg-red-600 z-50 pointer-events-auto transition-transform hover:scale-110">
+                                <button type="button" onClick={(e) => {e.stopPropagation(); handleRemoveIconCreate();}} className="absolute top-4 right-4 p-2 bg-red-500 text-white rounded-full shadow-lg hover:bg-red-600 z-50 pointer-events-auto transition-transform hover:scale-110 active:scale-95">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                                 </button>
                             )}
@@ -345,15 +452,15 @@ export default function Dashboard() {
                     <div className="space-y-4">
                         <div> 
                             <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Roadmap Name <span className="text-red-500">*</span></label> 
-                            <input autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Q1 Product Strategy" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl font-bold outline-none focus:border-[#3f407e] placeholder:text-slate-400" required /> 
+                            <input autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Q1 Product Strategy" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl font-bold outline-none focus:border-[#3f407e] focus:ring-4 focus:ring-[#3f407e]/10 transition-all placeholder:text-slate-400" required /> 
                         </div>
                         <div> 
                             <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Description (Optional)</label> 
-                            <textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="What is this roadmap about?" style={{ minHeight: '120px', maxHeight: '300px' }} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl font-medium outline-none focus:border-[#3f407e] transition-colors resize-y placeholder:text-slate-400" /> 
+                            <textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="What is this roadmap about?" style={{ minHeight: '120px', maxHeight: '300px' }} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl font-medium outline-none focus:border-[#3f407e] focus:ring-4 focus:ring-[#3f407e]/10 transition-all resize-y placeholder:text-slate-400" /> 
                         </div>
-                        <div className="flex gap-3 pt-6 border-t border-slate-100 dark:border-slate-800"> 
+                        <div className="flex gap-3 pt-6 border-t border-slate-100 dark:border-slate-800/50"> 
                             <button type="button" onClick={() => setIsCreateModalOpen(false)} className="flex-1 py-3 font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors">Cancel</button> 
-                            <button type="submit" disabled={isSubmitting || !title.trim()} className="flex-1 py-3 font-bold text-white bg-[#3f407e] hover:bg-[#323366] rounded-xl shadow-lg disabled:opacity-70 transition-all disabled:cursor-not-allowed">{isSubmitting ? 'Creating...' : 'Create Roadmap'}</button> 
+                            <button type="submit" disabled={isSubmitting || !title.trim()} className="flex-1 py-3 font-bold text-white bg-[#3f407e] hover:bg-[#323366] rounded-xl shadow-[0_4px_14px_0_rgb(63,64,126,0.39)] disabled:shadow-none disabled:opacity-70 transition-all disabled:cursor-not-allowed hover:-translate-y-[1px] active:scale-95">{isSubmitting ? 'Creating...' : 'Create Roadmap'}</button> 
                         </div>
                     </div>
                 </motion.form>

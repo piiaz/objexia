@@ -27,40 +27,45 @@ export default function SortableSidebar({
     ? `border-b ${colors.milestone.border}`
     : 'border-b border-white/20 dark:border-white/10';
 
-  const style = {
-    gridColumn: 1,
-    gridRow: gridRow,
-    transform: CSS.Translate.toString(transform),
-    transition,
-    zIndex: isDragging ? 1000 : 100, 
-    opacity: isDragging ? 0.9 : 1,
-  }
-
-  // --- ADAPTIVE LINE CLAMP LOGIC ---
   const extraOffset = isMilestoneRow ? 20 : 0;
   const availableHeight = laneHeight - 48 - extraOffset;
   const maxLines = Math.max(1, Math.floor(availableHeight / 20));
+
+  const finalTransform = isDragging && transform 
+      ? `translate3d(${transform.x}px, ${transform.y}px, 0) scale(1.02) rotate(1deg)`
+      : CSS.Translate.toString(transform);
+
+  const style = {
+    gridColumn: 1,
+    gridRow: gridRow,
+    transform: finalTransform,
+    transition: isDragging ? 'none' : transition,
+    // UPGRADED: High z-index to dominate any hovered roadmap items
+    zIndex: isDragging ? 1000 : 80, 
+  }
 
   return (
     <div 
       ref={setNodeRef}
       style={style}
-      className="sticky left-0 h-full w-full group/sidebar touch-none py-2 pr-2 bg-slate-50/50 dark:bg-[#191b19]"
+      // UPGRADED: px-3 for spacing, z-80 and isolate for perfect clipping
+      className="sticky left-0 h-full w-full group/sidebar touch-none py-2 px-3 z-[80] isolate"
     >
       {sidebarOpen && (
         <div 
+            id={group.id} 
             onClick={onEdit} 
             className={`
-                // --- FIX: Changed items-start to items-center ---
                 relative flex items-center justify-between 
-                w-full h-full ml-2 p-4 rounded-xl
+                w-full h-full p-4 rounded-xl
                 ${bgColor} ${borderClass} ${textColor}
-                shadow-sm cursor-pointer 
-                transition-all duration-200
-                hover:shadow-md hover:brightness-105 overflow-hidden
+                cursor-pointer transition-all duration-300 ease-in-out overflow-hidden
+                ${isDragging 
+                    ? 'shadow-[0_20px_40px_-10px_rgba(0,0,0,0.5)] ring-2 ring-white/30 brightness-110' 
+                    : 'shadow-sm hover:shadow-md hover:brightness-105'
+                }
             `}
         >
-          {/* --- FIX: Added justify-center here to ensure perfect middle alignment --- */}
           <div className="flex flex-col justify-center flex-1 mr-2 min-w-0 h-full">
                 <span 
                     className="text-sm font-extrabold tracking-tight drop-shadow-sm break-words whitespace-normal"
@@ -97,12 +102,8 @@ export default function SortableSidebar({
             title="Drag to reorder"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="9" cy="8" r="1.5" />
-                <circle cx="9" cy="12" r="1.5" />
-                <circle cx="9" cy="16" r="1.5" />
-                <circle cx="15" cy="8" r="1.5" />
-                <circle cx="15" cy="12" r="1.5" />
-                <circle cx="15" cy="16" r="1.5" />
+                <circle cx="9" cy="8" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="9" cy="16" r="1.5" />
+                <circle cx="15" cy="8" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="15" cy="16" r="1.5" />
             </svg>
           </button>
         </div>
