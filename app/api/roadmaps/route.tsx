@@ -38,7 +38,6 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ roadmaps })
   } catch (error) {
-    console.error('Error fetching roadmaps:', error)
     return NextResponse.json({ error: 'Failed to fetch roadmaps' }, { status: 500 })
   }
 }
@@ -48,10 +47,6 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     const { title, description, avatarUrl, userId, order } = body
-
-    if (!title || !userId) {
-      return NextResponse.json({ error: 'Title and UserID are required' }, { status: 400 })
-    }
 
     const roadmap = await prisma.roadmap.create({
       data: {
@@ -70,11 +65,7 @@ export async function POST(request: Request) {
     })
 
     return NextResponse.json({ roadmap })
-
   } catch (error: any) {
-    if (error.code === 'P2002') {
-      return NextResponse.json({ error: 'A roadmap with this name already exists.' }, { status: 409 })
-    }
     return NextResponse.json({ error: 'Failed to create roadmap' }, { status: 500 })
   }
 }

@@ -1,80 +1,38 @@
-import { NextResponse } from 'next/server'
-import { prisma } from '@/app/lib/prisma'
+import { NextResponse } from 'next/server';
+import { prisma } from '@/app/lib/prisma';
 
-// GET: Fetch all roadmaps for a specific user (Owned + Shared + Pending)
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const userId = searchParams.get('userId')
+export async function PATCH(req: Request) {
+    try {
+        const { roadmapId, userId, action } = await req.json();
 
-  if (!userId) {
-    return NextResponse.json({ error: 'UserId is required' }, { status: 400 })
-  }
-
-  try {
-    const roadmaps = await prisma.roadmap.findMany({
-      where: {
-        OR: [
-          { userId: userId }, 
-          { collaborators: { some: { userId: userId } } } 
-        ]
-      },
-      orderBy: [
-        { order: 'asc' },        
-        { lastEdited: 'desc' }   
-      ], 
-      include: {
-        _count: {
-          select: { lanes: true, items: true, milestones: true }
-        },
-        user: {
-          select: { id: true, firstName: true, email: true, avatarUrl: true }
-        },
-        collaborators: {
-          where: { userId: userId },
-          select: { status: true, role: true }
+        if (action === 'ACCEPT') {
+            await prisma.roadmapAccess.update({
+                where: { 
+                    roadmapId_userId: { 
+                        roadmapId: String(roadmapId), 
+                        userId: String(userId) 
+                    } 
+                },
+                data: { status: 'ACCEPTED' }
+            });
+            return NextResponse.json({ success: true });
+        } 
+        
+        if (action === 'REJECT') {
+            await prisma.roadmapAccess.delete({
+                where: { 
+                    roadmapId_userId: { 
+                        roadmapId: String(roadmapId), 
+                        userId: String(userId) 
+                    } 
+                }
+            });
+            return NextResponse.json({ success: true });
         }
-      }
-    })
 
-    return NextResponse.json({ roadmaps })
-  } catch (error) {
-    console.error('Error fetching roadmaps:', error)
-    return NextResponse.json({ error: 'Failed to fetch roadmaps' }, { status: 500 })
-  }
-}
-
-// POST: Create a new roadmap
-export async function POST(request: Request) {
-  try {
-    const body = await request.json()
-    const { title, description, avatarUrl, userId, order } = body
-
-    if (!title || !userId) {
-      return NextResponse.json({ error: 'Title and UserID are required' }, { status: 400 })
+        return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    } catch (error) {
+        console.error("Invitation API Error:", error);
+        return NextResponse.json({ error: 'Database update failed' }, { status: 500 });
     }
-
-    const roadmap = await prisma.roadmap.create({
-      data: {
-        title: title.trim(),
-        description,
-        avatarUrl,
-        userId,
-        order: order || 0,
-        lanes: {
-          create: [
-            { title: 'Strategy', color: 'blue', order: 0, type: 'lane' },
-            { title: 'Development', color: 'red', order: 1, type: 'lane' }
-          ]
-        }
-      }
-    })
-
-    return NextResponse.json({ roadmap })
-
-  } catch (error: any) {
-    if (error.code === 'P2002') {
-      return NextResponse.json({ error: 'A roadmap with this name already exists.' }, { status: 409 })
-    }
-    return NextResponse.json({ error: 'Failed to create roadmap' }, { status: 500 })
-  }
 }
