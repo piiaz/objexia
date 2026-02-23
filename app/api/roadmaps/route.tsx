@@ -1,7 +1,9 @@
+// app/api/roadmaps/route.ts
+
 import { NextResponse } from 'next/server'
 import { prisma } from '@/app/lib/prisma'
 
-// GET: Fetch all roadmaps for a specific user
+// GET: Fetch all roadmaps for a specific user (Owned + Shared)
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const userId = searchParams.get('userId')
@@ -12,14 +14,23 @@ export async function GET(request: Request) {
 
   try {
     const roadmaps = await prisma.roadmap.findMany({
-      where: { userId },
+      where: {
+        OR: [
+          { userId: userId }, // 1. Roadmaps the user owns
+          { collaborators: { some: { userId: userId } } } // 2. Roadmaps shared with the user
+        ]
+      },
       orderBy: [
-    { order: 'asc' },        // <--- Primary Sort: Custom Order
-    { lastEdited: 'desc' }   // <--- Secondary Sort: Date
+        { order: 'asc' },        // <--- Primary Sort: Custom Order
+        { lastEdited: 'desc' }   // <--- Secondary Sort: Date
       ], 
       include: {
         _count: {
           select: { lanes: true, items: true, milestones: true }
+        },
+        // Fetch the owner's info so we can display it on shared cards
+        user: {
+          select: { id: true, firstName: true, email: true, avatarUrl: true }
         }
       }
     })
@@ -60,12 +71,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ roadmap })
 
   } catch (error: any) {
-    // --- FIX: Catch Unique Constraint Violation ---
-    // Prisma code P2002 = "Unique constraint failed on the {constraint}"
     if (error.code === 'P2002') {
       return NextResponse.json(
         { error: 'A roadmap with this name already exists.' }, 
-        { status: 409 } // 409 Conflict
+        { status: 409 }
       )
     }
 
@@ -73,9 +82,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to create roadmap' }, { status: 500 })
   }
 }
-
-// Add this export at the bottom of the route.ts file if you hit limits
-// Note: This specific config style depends slightly on Next.js version, 
-// but usually App Router handles streams better.
-// If you face 413 errors even after compression, let me know. 
-// The client-side compression usually solves it completely without config changes.

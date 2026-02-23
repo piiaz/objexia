@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { 
   differenceInDays, format, startOfMonth, addDays, parseISO, endOfMonth, 
   startOfQuarter, endOfQuarter, eachQuarterOfInterval, eachMonthOfInterval, 
@@ -18,6 +19,9 @@ import {
 import { motion, AnimatePresence } from 'framer-motion' 
 import toast, { Toaster } from 'react-hot-toast' 
 
+// --- LIVEBLOCKS IMPORTS ---
+import { useOthers, useUpdateMyPresence, useBroadcastEvent, useEventListener } from '@liveblocks/react'
+
 import { useAuth } from '../context/AuthContext' 
 import ThemeToggle from './ThemeToggle' 
 import AuthBarrierModal from './AuthBarrierModal' 
@@ -30,7 +34,7 @@ import RoadmapItem from './RoadmapItem'
 import MilestoneItem from './MilestoneItem'
 import SortableSidebar from './SortableSidebar' 
 import ItemEditorModal from './ItemEditorModal' 
-import ShareModal from './ShareModal' // <--- IMPORTED SHARE MODAL
+import ShareModal from './ShareModal' 
 import { 
   ITEM_GAP, TOP_PADDING, MILESTONE_STACK_HEIGHT, BASE_ROW_HEIGHT, 
   HEADER_MAIN_HEIGHT, HEADER_SUB_HEIGHT, Group, Milestone, Item, 
@@ -56,14 +60,56 @@ function DroppableLane({ groupId, height, rowIndex, headerRows }: { groupId: str
   )
 }
 
+// --- NEW COMPONENT: LIVE CURSORS ---
+function LiveCursors() {
+    const others = useOthers();
+    
+    return (
+        <>
+            {others.map(({ connectionId, presence, info }: any) => {
+                if (!presence?.cursor) return null;
+                return (
+                    <motion.div
+                        key={connectionId}
+                        className="fixed top-0 left-0 pointer-events-none z-[9999]"
+                        animate={{ x: presence.cursor.x, y: presence.cursor.y }}
+                        transition={{ type: "spring", damping: 30, mass: 0.5, stiffness: 400 }}
+                    >
+                        <svg width="24" height="36" viewBox="0 0 24 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M5.65376 12.3673H5.46026L5.31717 12.4976L0.500002 16.8829L0.500002 1.19841L11.7841 12.3673H5.65376Z" fill={info?.color || "#3f407e"}/>
+                        </svg>
+                        <div 
+                            className="px-2 py-1 text-xs font-bold rounded-md shadow-md ml-4 mt-2 whitespace-nowrap" 
+                            style={{ backgroundColor: info?.color || '#3f407e', color: '#fff' }}
+                        >
+                            {info?.name || 'Anonymous'}
+                        </div>
+                    </motion.div>
+                );
+            })}
+        </>
+    );
+}
+
 type Props = { roadmapId: string; }
 
 export default function Timeline({ roadmapId }: Props) {
-  const { user } = useAuth() 
+  const router = useRouter(); 
+  const { user, isLoading: authLoading } = useAuth() 
+  
+  // --- LIVEBLOCKS HOOKS ---
+  const others = useOthers();
+  const updateMyPresence = useUpdateMyPresence();
+  const broadcast = useBroadcastEvent();
+
   const [roadmapTitle, setRoadmapTitle] = useState('Loading...')
   const [isLoading, setIsLoading] = useState(true)
+  
+  const [userRole, setUserRole] = useState<'OWNER' | 'EDITOR' | 'VIEWER' | null>(null);
+  const canEdit = userRole === 'OWNER' || userRole === 'EDITOR';
+  
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false) // <--- ADDED STATE FOR SHARE MODAL
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false) 
   const [laneManagerMode, setLaneManagerMode] = useState<'add' | 'manage' | null>(null)
   const [editingLaneId, setEditingLaneId] = useState<string | null>(null)
   const [editingItem, setEditingItem] = useState<Item | null>(null) 
@@ -97,30 +143,26 @@ export default function Timeline({ roadmapId }: Props) {
   const totalDays = differenceInDays(roadmapEnd, roadmapStart) + 1
   
   const saveRoadmapSettings = useCallback(async (payload: any) => {
-      if (!roadmapId) return;
+      if (!roadmapId || !canEdit) return; 
       try {
           await fetch(`/api/roadmaps/${roadmapId}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload)
           });
+          broadcast({ type: 'REFETCH' }); // Tell others the view settings changed
       } catch (e) {
           console.error("Failed to auto-save view settings", e);
       }
-  }, [roadmapId]);
+  }, [roadmapId, canEdit, broadcast]);
 
   useEffect(() => {
     if (!isLoading && (items.length > 0 || milestones.length > 0 || groups.length > 0)) {
-        const event = new CustomEvent('objexia-roadmap-data', { 
-            detail: { items, milestones, groups } 
-        });
+        const event = new CustomEvent('objexia-roadmap-data', { detail: { items, milestones, groups } });
         window.dispatchEvent(event);
     }
-    
     return () => {
-        window.dispatchEvent(new CustomEvent('objexia-roadmap-data', { 
-            detail: { items: [], milestones: [], groups: [] } 
-        }));
+        window.dispatchEvent(new CustomEvent('objexia-roadmap-data', { detail: { items: [], milestones: [], groups: [] } }));
     };
   }, [items, milestones, groups, isLoading]);
 
@@ -150,11 +192,7 @@ export default function Timeline({ roadmapId }: Props) {
           const container = containerRef.current;
           const line = todayRef.current;
           const scrollLeft = line.offsetLeft - (container.clientWidth / 2) + (line.clientWidth / 2);
-          
-          container.scrollTo({
-              left: scrollLeft,
-              behavior: 'smooth'
-          });
+          container.scrollTo({ left: scrollLeft, behavior: 'smooth' });
       }
   };
 
@@ -177,43 +215,65 @@ export default function Timeline({ roadmapId }: Props) {
   const milestoneStackHeight = isWeekly ? 72 : 48;
   
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 }, disabled: !user }), 
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 }, disabled: !user })
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 }, disabled: !canEdit }), 
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 }, disabled: !canEdit })
   )
 
+  // --- REFACTORED DATA LOADING (With Silent Refetch for Real-time) ---
+  const loadRoadmapData = useCallback(async (silent = false) => {
+    if (!roadmapId || !user?.id) return;
+    if (!silent) setIsLoading(true);
+    
+    try { 
+      const res = await fetch(`/api/roadmaps/${roadmapId}?userId=${user.id}`); 
+      if (res.ok) { 
+        const data = await res.json(); 
+        setRoadmapTitle(data.title); 
+        if (data.lanes) setGroups(data.lanes); 
+        if (data.items) setItems(data.items); 
+        if (data.milestones) setMilestones(data.milestones); 
+        if (data.startDate && data.endDate) { setDateRange({ start: data.startDate, end: data.endDate }); }
+        if (data.timeView) setTimeView(data.timeView as TimeView);
+        if (data.showWeekends !== undefined) setShowWeekends(data.showWeekends);
+        
+        setUserRole(data.currentUserRole); 
+
+      } else if (res.status === 401 || res.status === 403) {
+        toast.error("You don't have permission to view this board.");
+        router.push('/dashboard');
+      }
+    } catch (e) { 
+        toast.error("Failed to load roadmap data"); 
+    } finally { 
+        if (!silent) setIsLoading(false); 
+    }
+  }, [roadmapId, user, router]);
+
+  // Initial Load
   useEffect(() => {
-    const handleJumpTodayEvent = () => handleJumpToToday();
-    window.addEventListener('objexia-jump-today', handleJumpTodayEvent);
-    return () => { window.removeEventListener('objexia-jump-today', handleJumpTodayEvent); };
-  }, [todayColumnIndex]); 
+    if (!authLoading) {
+        if (user) { loadRoadmapData(); } 
+        else { setIsAuthBarrierOpen(true); setIsLoading(false); }
+    }
+  }, [authLoading, user, loadRoadmapData]);
+
+  // --- LIVEBLOCKS: LISTEN FOR OTHERS' CHANGES ---
+useEventListener(({ event }) => {
+    // Tell TypeScript we expect an object with a 'type' string
+    const liveEvent = event as { type: string }; 
+    
+    if (liveEvent.type === 'REFETCH') {
+        loadRoadmapData(true); // Fetch new data silently in the background
+    }
+  });
 
   useEffect(() => {
     const savedSidebar = localStorage.getItem('objexia_sidebar_state');
     if (savedSidebar !== null) setSidebarOpen(savedSidebar === 'true');
     const resizeObserver = new ResizeObserver((entries) => { for (let entry of entries) setContainerWidth(entry.contentRect.width) })
     if (containerRef.current) resizeObserver.observe(containerRef.current)
-    
-    async function loadRoadmapData() {
-        if (!roadmapId) return;
-        setIsLoading(true);
-        try { 
-          const res = await fetch(`/api/roadmaps/${roadmapId}`); 
-          if (res.ok) { 
-            const data = await res.json(); 
-            setRoadmapTitle(data.title); 
-            if (data.lanes) setGroups(data.lanes); 
-            if (data.items) setItems(data.items); 
-            if (data.milestones) setMilestones(data.milestones); 
-            if (data.startDate && data.endDate) { setDateRange({ start: data.startDate, end: data.endDate }); }
-            if (data.timeView) setTimeView(data.timeView as TimeView);
-            if (data.showWeekends !== undefined) setShowWeekends(data.showWeekends);
-          } 
-        } catch (e) { console.error(e); toast.error("Failed to load roadmap"); } 
-        finally { setIsLoading(false); }
-    }
-    loadRoadmapData();
     return () => resizeObserver.disconnect()
-  }, [roadmapId])
+  }, []);
 
   const toggleSidebar = () => { const newState = !sidebarOpen; setSidebarOpen(newState); localStorage.setItem('objexia_sidebar_state', String(newState)); }
   const checkAuth = (action: () => void) => { if (user) { action(); } else { setIsAuthBarrierOpen(true); } }
@@ -228,38 +288,52 @@ export default function Timeline({ roadmapId }: Props) {
   const handleWeekendToggle = () => { const newVal = !showWeekends; setShowWeekends(newVal); saveRoadmapSettings({ showWeekends: newVal }); };
 
   const handleReorderLanes = async (newGroups: Group[]) => {
+      if (!canEdit) return;
       const previousGroups = [...groups];
       setGroups(newGroups); 
       try { 
         const updates = newGroups.map((g, idx) => ({ id: g.id, order: idx })); 
         await fetch('/api/lanes', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lanes: updates }) }); 
         toast.success("Tracks reordered", { id: 'reorder-lanes' });
-      } catch (e) { console.error(e); setGroups(previousGroups); toast.error("Failed to reorder lanes"); }
+        broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+      } catch (e) { setGroups(previousGroups); toast.error("Failed to reorder lanes"); }
   }
 
   const handleCreateLane = async (title: string, color: string, type: GroupType) => {
+    if (!canEdit) return;
     try { 
       const res = await fetch('/api/lanes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, color, roadmapId, order: groups.length, type }) }); 
       const data = await res.json(); 
-      if (res.ok) { setGroups([...groups, data.lane]); toast.success("Track created"); }
-    } catch (e) { console.error(e); toast.error("Failed to create track"); }
+      if (res.ok) { 
+          setGroups([...groups, data.lane]); 
+          toast.success("Track created"); 
+          broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+      }
+    } catch (e) { toast.error("Failed to create track"); }
   }
 
   const handleUpdateLane = async (id: string, data: any) => {
-    const currentGroup = groups.find(g => g.id === id);
-    if (!currentGroup) return;
+    if (!canEdit) return;
     setGroups(prev => prev.map(g => g.id === id ? { ...g, ...data } : g));
-    try { await fetch(`/api/lanes/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); toast.success("Track updated"); } 
-    catch (e) { console.error(e); toast.error("Failed to update track"); }
+    try { 
+        await fetch(`/api/lanes/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); 
+        toast.success("Track updated"); 
+        broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+    } catch (e) { toast.error("Failed to update track"); }
   }
 
   const handleDeleteLane = async (id: string) => {
+    if (!canEdit) return;
     setGroups(prev => prev.filter(g => g.id !== id)); setLaneManagerMode(null);
-    try { await fetch(`/api/lanes/${id}`, { method: 'DELETE' }); toast.success("Track deleted"); } 
-    catch (e) { console.error(e); toast.error("Failed to delete track"); }
+    try { 
+        await fetch(`/api/lanes/${id}`, { method: 'DELETE' }); 
+        toast.success("Track deleted"); 
+        broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+    } catch (e) { toast.error("Failed to delete track"); }
   }
 
   const handleSaveItem = async (itemData: any) => {
+    if (!canEdit) return;
     const isUpdate = !!editingItem; 
     const itemId = isUpdate ? editingItem.id : (itemData.id || Math.random().toString());
     const trackIndex = isUpdate ? editingItem.trackIndex : (itemData.trackIndex || 0);
@@ -273,31 +347,46 @@ export default function Timeline({ roadmapId }: Props) {
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...itemData, roadmapId, trackIndex }) }); 
       if (!res.ok) throw new Error();
       toast.success(isUpdate ? "Item updated" : "Item created");
-    } catch (error) { console.error("Save failed", error); toast.error("Failed to save item"); }
+      broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+    } catch (error) { toast.error("Failed to save item"); }
   }
 
   const handleDeleteItem = async () => { 
-    if (!editingItem) return; const id = editingItem.id; setItems(prev => prev.filter(i => i.id !== id)); setIsModalOpen(false); setEditingItem(null); 
-    try { await fetch(`/api/items/${id}`, { method: 'DELETE' }); toast.success("Item deleted"); } 
-    catch (e) { console.error(e); toast.error("Failed to delete item"); } 
+    if (!canEdit || !editingItem) return; const id = editingItem.id; setItems(prev => prev.filter(i => i.id !== id)); setIsModalOpen(false); setEditingItem(null); 
+    try { 
+        await fetch(`/api/items/${id}`, { method: 'DELETE' }); 
+        toast.success("Item deleted"); 
+        broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+    } catch (e) { toast.error("Failed to delete item"); } 
   }
   
   const handleSaveMilestone = async (data: any) => { 
+      if (!canEdit) return;
       const isNew = !data.id; const optimistic = { ...data, id: data.id || Math.random().toString(), trackIndex: data.trackIndex || 0, roadmapId } as Milestone; 
       if (!isNew) setMilestones(prev => prev.map(m => m.id === optimistic.id ? optimistic : m)); else setMilestones(prev => [...prev, optimistic]); 
       setMilestoneModalOpen(false); setCurrentMilestoneData(null); 
-      try { const method = isNew ? 'POST' : 'PATCH'; const url = isNew ? '/api/milestones' : `/api/milestones/${data.id}`; await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...data, roadmapId }) }); toast.success(isNew ? "Milestone added" : "Milestone updated");
-      } catch (e) { console.error(e); toast.error("Failed to save milestone"); } 
+      try { 
+          const method = isNew ? 'POST' : 'PATCH'; const url = isNew ? '/api/milestones' : `/api/milestones/${data.id}`; 
+          await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...data, roadmapId }) }); 
+          toast.success(isNew ? "Milestone added" : "Milestone updated");
+          broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+      } catch (e) { toast.error("Failed to save milestone"); } 
   }
 
   const handleDeleteMilestone = async (id: string) => { 
+    if (!canEdit) return;
     setMilestones(prev => prev.filter(m => m.id !== id)); setMilestoneModalOpen(false); 
-    try { await fetch(`/api/milestones/${id}`, { method: 'DELETE' }); toast.success("Milestone deleted"); } 
-    catch (e) { console.error(e); toast.error("Failed to delete milestone"); } 
+    try { 
+        await fetch(`/api/milestones/${id}`, { method: 'DELETE' }); 
+        toast.success("Milestone deleted"); 
+        broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+    } catch (e) { toast.error("Failed to delete milestone"); } 
   }
 
   const handleDragEnd = async (event: DragEndEvent) => {
     if (!user) { setIsAuthBarrierOpen(true); return; }
+    if (!canEdit) return;
+
     const { active, delta, over } = event;
     const activeIdStr = active.id.toString();
 
@@ -311,7 +400,11 @@ export default function Timeline({ roadmapId }: Props) {
             let updatedItem = { ...item };
             if (isLeft) { const endDate = parseISO(item.endDate); updatedItem.startDate = format(isAfter(newDate, endDate) ? endDate : newDate, 'yyyy-MM-dd'); } else { const startDate = parseISO(item.startDate); updatedItem.endDate = format(isBefore(newDate, startDate) ? startDate : newDate, 'yyyy-MM-dd'); }
             setItems(prev => prev.map(i => i.id === itemId ? updatedItem : i));
-            try { await fetch(`/api/items/${itemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ startDate: updatedItem.startDate, endDate: updatedItem.endDate }) }); toast.success("Item resized", { id: 'resize-item' }); } catch(e) { toast.error("Failed to resize item"); }
+            try { 
+                await fetch(`/api/items/${itemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ startDate: updatedItem.startDate, endDate: updatedItem.endDate }) }); 
+                toast.success("Item resized", { id: 'resize-item' }); 
+                broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+            } catch(e) { toast.error("Failed to resize item"); }
         }
         return;
     }
@@ -326,7 +419,11 @@ export default function Timeline({ roadmapId }: Props) {
         const newDate = addDays(parseISO(milestone.date), daysMoved); const newTrackIndex = Math.max(0, (milestone.trackIndex || 0) + trackSteps);
         const optimisticMilestone = { ...milestone, date: format(newDate, 'yyyy-MM-dd'), trackIndex: newTrackIndex };
         setMilestones(prev => prev.map(m => m.id === milestone.id ? optimisticMilestone : m));
-        try { await fetch(`/api/milestones/${milestone.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: optimisticMilestone.date, trackIndex: optimisticMilestone.trackIndex }) }); toast.success("Milestone moved", { id: 'move-milestone' }); } catch (e) { toast.error("Failed to move milestone"); }
+        try { 
+            await fetch(`/api/milestones/${milestone.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: optimisticMilestone.date, trackIndex: optimisticMilestone.trackIndex }) }); 
+            toast.success("Milestone moved", { id: 'move-milestone' }); 
+            broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+        } catch (e) { toast.error("Failed to move milestone"); }
         return;
     }
     if (!over) return;
@@ -337,19 +434,31 @@ export default function Timeline({ roadmapId }: Props) {
         if (targetGroup && targetGroup.id !== item.groupId && targetGroup.type !== 'milestone') { newGroupId = targetGroup.id; newTrackIndex = 0; } else { const trackSteps = Math.round(delta.y / (VIEW_ITEM_HEIGHTS[timeView] + ITEM_GAP)); newTrackIndex = Math.max(0, item.trackIndex + trackSteps); }
         const optimistic = { ...item, startDate: format(newStart, 'yyyy-MM-dd'), endDate: format(newEnd, 'yyyy-MM-dd'), trackIndex: newTrackIndex, groupId: newGroupId };
         setItems(prev => prev.map(i => i.id === item.id ? optimistic : i));
-        try { await fetch(`/api/items/${item.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ startDate: optimistic.startDate, endDate: optimistic.endDate, trackIndex: optimistic.trackIndex, groupId: optimistic.groupId }) }); toast.success("Item moved", { id: 'move-item' }); } catch(e) { toast.error("Failed to move item"); }
+        try { 
+            await fetch(`/api/items/${item.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ startDate: optimistic.startDate, endDate: optimistic.endDate, trackIndex: optimistic.trackIndex, groupId: optimistic.groupId }) }); 
+            toast.success("Item moved", { id: 'move-item' }); 
+            broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+        } catch(e) { toast.error("Failed to move item"); }
     }
   }
 
   const handleExport = () => { checkAuth(() => { const csv = generateCsvContent(groups, items, milestones); const blob = new Blob([csv], {type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='roadmap.csv'; a.click(); }) }
-  const handleImportClick = () => { checkAuth(() => fileInputRef.current?.click()) }
+  const handleImportClick = () => { if (!canEdit) return; checkAuth(() => fileInputRef.current?.click()) }
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => { const file=e.target.files?.[0]; if(!file)return; const r=new FileReader(); r.onload=(ev)=>{ const t=ev.target?.result; if(typeof t==='string'){ try { const p=parseCsvContent(t); if(p.groups.length>0){ setPendingImportData(p); setImportConfirmOpen(true); } else { toast.error("No valid data found in CSV"); } } catch(e) { toast.error("Invalid CSV format"); } } }; r.readAsText(file); e.target.value=''; }
-  const confirmImport = () => { if(pendingImportData){ setGroups(pendingImportData.groups); setItems(pendingImportData.items); setMilestones(pendingImportData.milestones); setImportConfirmOpen(false); setPendingImportData(null); toast.success("Roadmap imported successfully"); } }
-  const handleEditLane = (group: Group) => { checkAuth(() => { setEditingLaneId(group.id); setLaneManagerMode('manage'); }) }
-  const openNewItemModal = () => { checkAuth(() => { setEditingItem(null); setIsModalOpen(true); }) }
-  const handleItemClick = (item: Item) => { checkAuth(() => { setEditingItem(item); setIsModalOpen(true); }) }
-  const handleMilestoneClick = (dayIndex: number, groupId: string) => { checkAuth(() => { const date = addDays(roadmapStart, dayIndex); setCurrentMilestoneData({ title: '', date: format(date, 'yyyy-MM-dd'), groupId, icon: 'diamond', color: 'text-slate-600', roadmapId }); setMilestoneModalOpen(true) }) }
-  const handleEditMilestone = (milestone: Milestone) => { checkAuth(() => { setCurrentMilestoneData(milestone); setMilestoneModalOpen(true); }) }
+  const confirmImport = () => { 
+      if(pendingImportData){ 
+          setGroups(pendingImportData.groups); setItems(pendingImportData.items); setMilestones(pendingImportData.milestones); 
+          setImportConfirmOpen(false); setPendingImportData(null); 
+          toast.success("Roadmap imported successfully"); 
+          broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+      } 
+  }
+  
+  const handleEditLane = (group: Group) => { if (!canEdit) return; checkAuth(() => { setEditingLaneId(group.id); setLaneManagerMode('manage'); }) }
+  const openNewItemModal = () => { if (!canEdit) return; checkAuth(() => { setEditingItem(null); setIsModalOpen(true); }) }
+  const handleItemClick = (item: Item) => { if (!canEdit) return; checkAuth(() => { setEditingItem(item); setIsModalOpen(true); }) }
+  const handleMilestoneClick = (dayIndex: number, groupId: string) => { if (!canEdit) return; checkAuth(() => { const date = addDays(roadmapStart, dayIndex); setCurrentMilestoneData({ title: '', date: format(date, 'yyyy-MM-dd'), groupId, icon: 'diamond', color: 'text-slate-600', roadmapId }); setMilestoneModalOpen(true) }) }
+  const handleEditMilestone = (milestone: Milestone) => { if (!canEdit) return; checkAuth(() => { setCurrentMilestoneData(milestone); setMilestoneModalOpen(true); }) }
 
   const layout = useMemo(() => {
     const visualPositions: Record<string, number> = {}; const groupHeights: Record<string, number> = {}; const currentItemHeight = VIEW_ITEM_HEIGHTS[timeView];
@@ -395,14 +504,25 @@ export default function Timeline({ roadmapId }: Props) {
   const gridRowsCSS = `${headerCSS} ${groups.map(g => `${layout.groupHeights[g.id]}px`).join(' ')} 80px`; 
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col h-[100dvh] w-full bg-white dark:bg-[#191b19] font-sans overflow-hidden transition-colors">
+    <motion.div 
+        initial={{ opacity: 0 }} 
+        animate={{ opacity: 1 }} 
+        className="flex flex-col h-[100dvh] w-full bg-white dark:bg-[#191b19] font-sans overflow-hidden transition-colors"
+        
+        // --- CAPTURE MOUSE MOVEMENTS FOR CURSORS ---
+        onPointerMove={(e) => updateMyPresence({ cursor: { x: Math.round(e.clientX), y: Math.round(e.clientY) } })}
+        onPointerLeave={() => updateMyPresence({ cursor: null })}
+    >
       
+      {/* --- RENDER EVERYONE ELSE'S CURSORS --- */}
+      <LiveCursors />
+
       {/* --- TOP NAVBAR --- */}
       <header className="flex flex-col md:flex-row md:items-center justify-between px-6 py-4 gap-4 border-b border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-[#191b19]/70 backdrop-blur-xl backdrop-saturate-150 z-[150] relative">
         <div className="flex flex-wrap items-center gap-4">
           <button 
             onClick={toggleSidebar} 
-            className="p-2 -ml-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-all duration-300"
+            className="p-2 -ml-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-all duration-300 relative z-10"
             title={sidebarOpen ? "Hide Sidebar" : "Show Sidebar"}
           >
             <div className={`transform transition-transform duration-300 ${sidebarOpen ? 'rotate-0' : 'rotate-180'}`}>
@@ -414,115 +534,148 @@ export default function Timeline({ roadmapId }: Props) {
             </div>
           </button>
           
-          <Link href="/dashboard" className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-2 group transition-colors">
+          <Link href="/dashboard" className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-2 group transition-colors relative z-10">
             <div className="bg-white dark:bg-slate-900 p-1.5 rounded-md group-hover:text-[#3f407e] text-slate-700 dark:text-slate-400 transition-colors">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
             </div>
             <span className="text-sm font-bold hidden md:inline text-slate-900 dark:text-[#b3bbea] group-hover:text-[#3f407e]">Dashboard</span>
           </Link>
           
-          <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700 relative z-10">
             <ObjexiaLogo className="w-8 h-8" />
             <h1 className="text-xl font-extrabold truncate max-w-[200px] text-slate-900 dark:text-white leading-tight tracking-tight">{roadmapTitle}</h1>
+            {userRole === 'VIEWER' && (
+                <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[9px] font-bold uppercase tracking-widest rounded-md ml-2">Read-Only</span>
+            )}
           </div>
           
-          <DateRangeSelector 
-            startDate={dateRange.start} 
-            endDate={dateRange.end} 
-            onChangeStart={(d) => handleDateChange('start', d)} 
-            onChangeEnd={(d) => handleDateChange('end', d)} 
-          />
-          
-          <div className="flex items-center gap-2">
-            <div className="w-[120px]">
-                <CustomSelect 
-                    value={timeView} 
-                    onChange={handleTimeViewChange} 
-                    options={[{ label: 'Quarterly', value: 'Quarter' }, { label: 'Monthly', value: 'Month' }, { label: 'Weekly', value: 'Week' }]} 
-                />
-            </div>
-            
-            <button 
-                onClick={handleWeekendToggle} 
-                className={`p-2.5 rounded-xl border transition-colors ${
-                    showWeekends 
-                        ? 'bg-[#3f407e]/10 border-[#3f407e]/20 text-[#3f407e] dark:bg-[#b3bbea]/10 dark:border-[#b3bbea]/20 dark:text-[#b3bbea]' 
-                        : 'border-slate-200 dark:border-slate-700 text-slate-400'
-                }`}
-                title="Toggle Weekends"
-            >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-            </button>
+          {/* Controls - Disabled visually if Viewer */}
+          <div className={`flex items-center gap-2 relative z-10 ${!canEdit ? 'pointer-events-none opacity-60 grayscale-[30%]' : ''}`}>
+              <DateRangeSelector 
+                startDate={dateRange.start} 
+                endDate={dateRange.end} 
+                onChangeStart={(d) => handleDateChange('start', d)} 
+                onChangeEnd={(d) => handleDateChange('end', d)} 
+              />
+              
+              <div className="w-[120px]">
+                  <CustomSelect 
+                      value={timeView} 
+                      onChange={handleTimeViewChange} 
+                      options={[{ label: 'Quarterly', value: 'Quarter' }, { label: 'Monthly', value: 'Month' }, { label: 'Weekly', value: 'Week' }]} 
+                  />
+              </div>
+              
+              <button 
+                  onClick={handleWeekendToggle} 
+                  className={`p-2.5 rounded-xl border transition-colors ${
+                      showWeekends 
+                          ? 'bg-[#3f407e]/10 border-[#3f407e]/20 text-[#3f407e] dark:bg-[#b3bbea]/10 dark:border-[#b3bbea]/20 dark:text-[#b3bbea]' 
+                          : 'border-slate-200 dark:border-slate-700 text-slate-400'
+                  }`}
+                  title="Toggle Weekends"
+              >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+              </button>
+          </div>
 
-            <motion.button 
-                onClick={handleJumpToToday}
-                animate={shakeButton ? { x: [0, -5, 5, -5, 5, 0] } : {}}
-                transition={{ duration: 0.4 }}
-                className={`p-2.5 rounded-xl border transition-all ${
-                    shakeButton 
-                        ? 'bg-red-100 border-red-300 text-red-500 dark:bg-red-900/30 dark:border-red-800 dark:text-red-400' 
-                        : 'border-slate-200 dark:border-slate-700 text-slate-400 hover:text-[#3f407e] dark:hover:text-[#b3bbea] hover:bg-slate-50 dark:hover:bg-slate-800'
-                }`}
-                title="Jump to Today"
-            >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <circle cx="12" cy="12" r="3"></circle>
-                    <line x1="12" y1="2" x2="12" y2="4"></line>
-                    <line x1="12" y1="20" x2="12" y2="22"></line>
-                    <line x1="2" y1="12" x2="4" y2="12"></line>
-                    <line x1="20" y1="12" x2="22" y2="12"></line>
-                </svg>
-            </motion.button>
-          </div>
+          <motion.button 
+              onClick={handleJumpToToday}
+              animate={shakeButton ? { x: [0, -5, 5, -5, 5, 0] } : {}}
+              transition={{ duration: 0.4 }}
+              className={`p-2.5 rounded-xl border transition-all ml-2 relative z-10 ${
+                  shakeButton 
+                      ? 'bg-red-100 border-red-300 text-red-500 dark:bg-red-900/30 dark:border-red-800 dark:text-red-400' 
+                      : 'border-slate-200 dark:border-slate-700 text-slate-400 hover:text-[#3f407e] dark:hover:text-[#b3bbea] hover:bg-slate-50 dark:hover:bg-slate-800'
+              }`}
+              title="Jump to Today"
+          >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <line x1="12" y1="2" x2="12" y2="4"></line>
+                  <line x1="12" y1="20" x2="12" y2="22"></line>
+                  <line x1="2" y1="12" x2="4" y2="12"></line>
+                  <line x1="20" y1="12" x2="22" y2="12"></line>
+              </svg>
+          </motion.button>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 relative z-10">
+          
+          {/* --- NEW ACTIVE USERS AVATAR STACK --- */}
+          {others.length > 0 && (
+            <div className="flex items-center -space-x-3 mr-2 pr-4 border-r border-slate-200 dark:border-slate-700">
+                {others.slice(0, 3).map(({ connectionId, info }: any) => (
+                    <div 
+                        key={connectionId} 
+                        className="w-8 h-8 rounded-full border-2 border-white dark:border-[#191b19] overflow-hidden shadow-sm z-10 bg-[#3f407e]" 
+                        title={info?.name}
+                    >
+                        {info?.avatar 
+                            ? <img src={info.avatar} className="w-full h-full object-cover" /> 
+                            : <div className="w-full h-full flex justify-center items-center text-white text-xs font-bold">{info?.name?.[0] || '?'}</div>
+                        }
+                    </div>
+                ))}
+                {others.length > 3 && (
+                    <div className="w-8 h-8 rounded-full border-2 border-white dark:border-[#191b19] bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs font-bold flex items-center justify-center z-0">
+                        +{others.length - 3}
+                    </div>
+                )}
+            </div>
+          )}
+
           <div className="hidden md:flex gap-2">
                 <button onClick={handleExport} className="p-2.5 rounded-lg border border-transparent hover:border-slate-200 dark:hover:border-slate-600 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-400 flex items-center gap-2 transition-colors">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     Export
                 </button>
-                <button onClick={handleImportClick} className="p-2.5 rounded-lg border border-transparent hover:border-slate-200 dark:hover:border-slate-600 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-400 flex items-center gap-2 transition-colors">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                    Import
-                </button>
+                {canEdit && (
+                    <button onClick={handleImportClick} className="p-2.5 rounded-lg border border-transparent hover:border-slate-200 dark:hover:border-slate-600 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-400 flex items-center gap-2 transition-colors">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        Import
+                    </button>
+                )}
                 <input type="file" ref={fileInputRef} onChange={handleFileChange} hidden accept=".csv" />
           </div>
 
-          {/* --- NEW SHARE BUTTON --- */}
-          <button 
-              onClick={() => checkAuth(() => setIsShareModalOpen(true))} 
-              className="p-2.5 rounded-xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center gap-2 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors shadow-sm"
-          >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
-              Share
-          </button>
+          {userRole === 'OWNER' && (
+              <button 
+                  onClick={() => checkAuth(() => setIsShareModalOpen(true))} 
+                  className="p-2.5 rounded-xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center gap-2 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors shadow-sm"
+              >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                  Share
+              </button>
+          )}
 
           <ThemeToggle />
           {user && (<Link href={`/profile?from=/roadmap/${roadmapId}`}><div className="w-9 h-9 rounded-full bg-[#b3bbea] dark:bg-[#3f407e] border-2 border-white dark:border-slate-700 shadow-sm overflow-hidden hover:scale-110 transition-transform">{user.avatarUrl ? <img src={user.avatarUrl} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-xs font-bold text-[#3f407e] dark:text-white">{user.firstName[0]}</div>}</div></Link>)}
           
-          <button 
-            onClick={openNewItemModal} 
-            className="
-                relative overflow-hidden group
-                px-5 py-2.5 rounded-xl font-bold text-sm
-                bg-[#3f407e] text-white
-                shadow-[0_4px_14px_0_rgb(63,64,126,0.39)] 
-                hover:shadow-[0_6px_20px_rgba(63,64,126,0.23)] 
-                hover:-translate-y-[1px]
-                active:scale-95 active:shadow-inner
-                transition-all duration-200 ease-out
-            "
-            >
-            <span className="relative z-10 flex items-center gap-2">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                <path d="M12 5v14M5 12h14"/>
-                </svg> 
-                New 
-            </span>
-            <div className="absolute inset-0 h-full w-full bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
-          </button>
+          {canEdit && (
+              <button 
+                onClick={openNewItemModal} 
+                className="
+                    relative overflow-hidden group
+                    px-5 py-2.5 rounded-xl font-bold text-sm
+                    bg-[#3f407e] text-white
+                    shadow-[0_4px_14px_0_rgb(63,64,126,0.39)] 
+                    hover:shadow-[0_6px_20px_rgba(63,64,126,0.23)] 
+                    hover:-translate-y-[1px]
+                    active:scale-95 active:shadow-inner
+                    transition-all duration-200 ease-out
+                "
+                >
+                <span className="relative z-10 flex items-center gap-2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                    <path d="M12 5v14M5 12h14"/>
+                    </svg> 
+                    New 
+                </span>
+                <div className="absolute inset-0 h-full w-full bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
+              </button>
+          )}
         </div>
       </header>
 
@@ -660,16 +813,18 @@ export default function Timeline({ roadmapId }: Props) {
                             )})}
                             </SortableContext>
                             
-                            {/* Track Addition Button row */}
-                            <motion.div layout="position" transition={{ type: "spring", stiffness: 400, damping: 40 }} className="sticky left-0 z-50 flex items-center justify-center px-4 py-4 overflow-hidden" style={{ gridColumn: 1, gridRow: groups.length + headerRowsCount + 1, height: '80px' }}>
-                                {sidebarOpen && ( 
-                                    <div className="flex w-full min-w-[200px] items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm backdrop-blur-sm"> 
-                                        <button onClick={() => checkAuth(() => { setEditingLaneId(null); setLaneManagerMode('add'); })} className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 bg-white dark:bg-[#3f407e] text-[#3f407e] dark:text-white rounded-lg shadow-sm hover:shadow-md transition-all font-bold text-xs border border-slate-200 dark:border-[#3f407e] active:scale-95"> <span className="text-lg leading-none">+</span> <span>Track</span> </button> 
-                                        <div className="w-[1px] h-6 bg-slate-300 dark:bg-slate-600" />
-                                        <button onClick={() => checkAuth(() => { setEditingLaneId(null); setLaneManagerMode('manage'); })} className="p-2.5 text-slate-500 dark:text-slate-400 hover:text-[#3f407e] dark:hover:text-white hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-all" title="Manage Structure"> <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg> </button> 
-                                    </div> 
-                                )}
-                            </motion.div>
+                            {/* Track Addition Button row (Hidden for Viewers) */}
+                            {canEdit && (
+                                <motion.div layout="position" transition={{ type: "spring", stiffness: 400, damping: 40 }} className="sticky left-0 z-50 flex items-center justify-center px-4 py-4 overflow-hidden" style={{ gridColumn: 1, gridRow: groups.length + headerRowsCount + 1, height: '80px' }}>
+                                    {sidebarOpen && ( 
+                                        <div className="flex w-full min-w-[200px] items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm backdrop-blur-sm"> 
+                                            <button onClick={() => checkAuth(() => { setEditingLaneId(null); setLaneManagerMode('add'); })} className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 bg-white dark:bg-[#3f407e] text-[#3f407e] dark:text-white rounded-lg shadow-sm hover:shadow-md transition-all font-bold text-xs border border-slate-200 dark:border-[#3f407e] active:scale-95"> <span className="text-lg leading-none">+</span> <span>Track</span> </button> 
+                                            <div className="w-[1px] h-6 bg-slate-300 dark:bg-slate-600" />
+                                            <button onClick={() => checkAuth(() => { setEditingLaneId(null); setLaneManagerMode('manage'); })} className="p-2.5 text-slate-500 dark:text-slate-400 hover:text-[#3f407e] dark:hover:text-white hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-all" title="Manage Structure"> <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg> </button> 
+                                        </div> 
+                                    )}
+                                </motion.div>
+                            )}
                             <div className="border-t border-slate-100 dark:border-slate-800 pointer-events-none z-10" style={{ gridRow: groups.length + headerRowsCount + 1, gridColumn: '2 / -1' }} />
                         </div>
                     </motion.div>

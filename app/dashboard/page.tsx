@@ -27,7 +27,7 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-// --- UPGRADED: Added `index` for staggered animations ---
+// --- DRAGGABLE CARD (For My Roadmaps) ---
 function SortableRoadmapCard({ map, index, onDelete, onEdit }: { map: RoadmapMeta, index: number, onDelete: (id: string) => void, onEdit: (map: RoadmapMeta) => void }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: map.id })
     const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 50 : 1 }
@@ -35,8 +35,7 @@ function SortableRoadmapCard({ map, index, onDelete, onEdit }: { map: RoadmapMet
     return (
         <div ref={setNodeRef} style={style} className="h-full">
             <motion.div 
-                layoutId={map.id} 
-                // --- UPGRADED: Staggered entry animation ---
+                layoutId={`card-${map.id}`} 
                 initial={{ opacity: 0, y: 30 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: index * 0.08, type: 'spring', stiffness: 200, damping: 20 }}
@@ -46,17 +45,16 @@ function SortableRoadmapCard({ map, index, onDelete, onEdit }: { map: RoadmapMet
                     transition-all duration-300 ease-out
                     ${isDragging 
                         ? 'border-[#3f407e] shadow-2xl scale-105 z-50 brightness-110' 
-                        : 'border-slate-200/60 dark:border-slate-800/60 shadow-md hover:shadow-[0_20px_40px_-15px_rgba(63,64,126,0.15)] dark:hover:shadow-[0_20px_40px_-15px_rgba(179,187,234,0.05)] hover:-translate-y-2 hover:border-[#3f407e]/30 dark:hover:border-[#b3bbea]/30'
+                        : 'border-slate-200/60 dark:border-slate-800/60 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-[#3f407e]/30 dark:hover:border-[#b3bbea]/30'
                     }
                     overflow-hidden
                 `}
             >
-                {/* Subtle Hover Gradient Overlay */}
                 <div className="absolute inset-0 bg-gradient-to-br from-transparent to-slate-50 dark:to-slate-800/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
                 <div {...attributes} {...listeners} className="flex-1 p-6 cursor-grab active:cursor-grabbing touch-none relative z-10">
                     <div className="flex justify-between items-start mb-4 gap-2">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#3f407e] to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-purple-500/20 overflow-hidden border border-white/10 shrink-0">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#3f407e] to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-md overflow-hidden shrink-0 border border-white/10">
                             {map.avatarUrl ? ( <img src={map.avatarUrl} alt="Icon" className="w-full h-full object-cover" /> ) : ( <span>{map.title[0].toUpperCase()}</span> )}
                         </div>
                         <div className="flex flex-col items-end text-[9px] font-bold uppercase tracking-widest bg-slate-100/50 dark:bg-slate-800/50 px-2 py-1.5 rounded-md leading-tight whitespace-nowrap">
@@ -71,16 +69,15 @@ function SortableRoadmapCard({ map, index, onDelete, onEdit }: { map: RoadmapMet
                 <div className="px-6 py-4 border-t border-slate-100/60 dark:border-slate-800/60 flex justify-between items-center bg-slate-50/30 dark:bg-slate-800/10 relative z-10">
                     <Link 
                         href={`/roadmap/${map.id}`} 
-                        className="group/btn flex items-center gap-2 px-4 py-2 rounded-lg bg-[#3f407e]/10 dark:bg-[#b3bbea]/10 text-[#3f407e] dark:text-[#b3bbea] font-bold text-xs hover:bg-[#3f407e] hover:text-white dark:hover:bg-[#b3bbea] dark:hover:text-slate-900 transition-all shadow-sm hover:shadow-md active:scale-95" 
+                        className="group/btn flex items-center gap-2 px-4 py-2 rounded-lg bg-[#3f407e]/10 dark:bg-[#b3bbea]/10 text-[#3f407e] dark:text-[#b3bbea] font-bold text-xs hover:bg-[#3f407e] hover:text-white dark:hover:bg-[#b3bbea] dark:hover:text-slate-900 transition-all shadow-sm active:scale-95" 
                         onPointerDown={(e) => e.stopPropagation()}
                     >
                         <span>Open Board</span>
-                        {/* Animated Arrow on Hover */}
                         <svg className="transform group-hover/btn:translate-x-1 transition-transform" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                     </Link>
                     <div className="flex items-center gap-1">
-                        <button onClick={() => onEdit(map)} onPointerDown={(e) => e.stopPropagation()} className="text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all p-2 rounded-lg" title="Edit Roadmap"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>
-                        <button onClick={() => onDelete(map.id)} onPointerDown={(e) => e.stopPropagation()} className="text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all p-2 rounded-lg" title="Delete Roadmap"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                        <button onClick={() => onEdit(map)} onPointerDown={(e) => e.stopPropagation()} className="text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all p-2 rounded-lg"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>
+                        <button onClick={() => onDelete(map.id)} onPointerDown={(e) => e.stopPropagation()} className="text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all p-2 rounded-lg"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
                     </div>
                 </div>
             </motion.div>
@@ -88,10 +85,53 @@ function SortableRoadmapCard({ map, index, onDelete, onEdit }: { map: RoadmapMet
     )
 }
 
+// --- STATIC CARD (For Shared With Me) ---
+function SharedRoadmapCard({ map, index }: { map: any, index: number }) {
+    return (
+        <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: index * 0.08, type: 'spring', stiffness: 200, damping: 20 }}
+            className="group relative bg-white/80 dark:bg-[#1e2126]/80 backdrop-blur-xl rounded-2xl border border-slate-200/60 dark:border-slate-800/60 flex flex-col h-full transition-all duration-300 ease-out hover:shadow-xl hover:-translate-y-1 hover:border-blue-300 dark:hover:border-blue-900/50 overflow-hidden"
+        >
+            <div className="absolute inset-0 bg-gradient-to-br from-transparent to-blue-50 dark:to-blue-900/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+
+            <div className="flex-1 p-6 relative z-10">
+                <div className="flex justify-between items-start mb-4 gap-2">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-bold text-xl shadow-md overflow-hidden shrink-0 border border-white/10">
+                        {map.avatarUrl ? ( <img src={map.avatarUrl} alt="Icon" className="w-full h-full object-cover" /> ) : ( <span>{map.title[0].toUpperCase()}</span> )}
+                    </div>
+                    
+                    {/* Owner Badge */}
+                    <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/20 px-2.5 py-1.5 rounded-lg border border-blue-100 dark:border-blue-900/50">
+                        <div className="w-4 h-4 rounded-full overflow-hidden bg-blue-200 flex items-center justify-center text-[8px] font-bold text-blue-700">
+                            {map.user?.avatarUrl ? <img src={map.user.avatarUrl} className="w-full h-full object-cover"/> : map.user?.firstName?.[0]}
+                        </div>
+                        <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">{map.user?.firstName}'s Board</span>
+                    </div>
+                </div>
+                <h3 className="text-xl font-bold mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-1 truncate" title={map.title}>{map.title}</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2 h-10 leading-relaxed">{map.description || "No description provided."}</p>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-100/60 dark:border-slate-800/60 flex justify-between items-center bg-slate-50/30 dark:bg-slate-800/10 relative z-10">
+                <Link 
+                    href={`/roadmap/${map.id}`} 
+                    className="group/btn flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold text-xs hover:bg-blue-600 hover:text-white dark:hover:bg-blue-500 dark:hover:text-white transition-all shadow-sm active:scale-95" 
+                >
+                    <span>Open Board</span>
+                    <svg className="transform group-hover/btn:translate-x-1 transition-transform" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </Link>
+                <div className="text-[10px] font-bold text-slate-400">Shared with you</div>
+            </div>
+        </motion.div>
+    )
+}
+
 export default function Dashboard() {
   const { user, logout, isAuthenticated } = useAuth()
   const router = useRouter()
-  const [roadmaps, setRoadmaps] = useState<RoadmapMeta[]>([])
+  const [roadmaps, setRoadmaps] = useState<any[]>([])
   
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -131,26 +171,21 @@ export default function Dashboard() {
 
   useEffect(() => { if (user?.id) fetchRoadmaps() }, [user])
 
-    useEffect(() => {
-    if (!isLoading && roadmaps.length > 0) {
-        window.dispatchEvent(new CustomEvent('objexia-roadmap-list', { 
-            detail: { roadmaps } 
-        }));
-    }
-    return () => {
-        window.dispatchEvent(new CustomEvent('objexia-roadmap-list', { detail: { roadmaps: [] } }));
-    };
-}, [roadmaps, isLoading]);
+  // --- Filter roadmaps by ownership ---
+  const myRoadmaps = roadmaps.filter(r => r.userId === user?.id);
+  const sharedRoadmaps = roadmaps.filter(r => r.userId !== user?.id);
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
-        const oldIndex = roadmaps.findIndex((r) => r.id === active.id);
-        const newIndex = roadmaps.findIndex((r) => r.id === over.id);
+        const oldIndex = myRoadmaps.findIndex((r) => r.id === active.id);
+        const newIndex = myRoadmaps.findIndex((r) => r.id === over.id);
         
         if (oldIndex !== -1 && newIndex !== -1) {
-            const newOrder = arrayMove(roadmaps, oldIndex, newIndex);
-            setRoadmaps(newOrder);
+            const newOrder = arrayMove(myRoadmaps, oldIndex, newIndex);
+            
+            // Re-merge lists so state stays in sync
+            setRoadmaps([...newOrder, ...sharedRoadmaps]);
 
             try {
                 const updates = newOrder.map((r, idx) => ({ id: r.id, order: idx }));
@@ -174,7 +209,7 @@ export default function Dashboard() {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) { setFormError("Title is required."); return; }
 
-    const isDuplicate = roadmaps.some(
+    const isDuplicate = myRoadmaps.some(
         (r) => r.title.trim().toLowerCase() === trimmedTitle.toLowerCase()
     );
     if (isDuplicate) {
@@ -193,13 +228,13 @@ export default function Dashboard() {
                 description: desc, 
                 avatarUrl, 
                 userId: user.id,
-                order: roadmaps.length 
+                order: myRoadmaps.length 
             })
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.error)
         
-        setRoadmaps([...roadmaps, data.roadmap])
+        setRoadmaps([data.roadmap, ...roadmaps])
         toast.success("Roadmap created successfully");
         setIsCreateModalOpen(false)
     } catch (err: any) {
@@ -212,7 +247,7 @@ export default function Dashboard() {
   const handleSaveEditedRoadmap = async (updatedData: RoadmapData, newImageFile?: File | null) => {
     setEditFormError(null); 
     
-    const isDuplicate = roadmaps.some(
+    const isDuplicate = myRoadmaps.some(
         (r) => r.id !== updatedData.id && r.title.trim().toLowerCase() === updatedData.title.trim().toLowerCase()
     );
     
@@ -302,8 +337,7 @@ export default function Dashboard() {
   const handleRemoveIconCreate = () => setAvatarUrl('');
 
   return (
-    <div className="min-h-screen bg-[#fafafa] dark:bg-[#121417] text-slate-900 dark:text-slate-100 transition-colors selection:bg-[#3f407e]/20">
-      {/* UPGRADED NAVBAR: Glassmorphism effect */}
+    <div className="min-h-screen bg-[#fafafa] dark:bg-[#121417] text-slate-900 dark:text-slate-100 transition-colors selection:bg-[#3f407e]/20 pb-20">
       <header className="sticky top-0 z-40 bg-white/70 dark:bg-[#191b19]/70 backdrop-blur-xl backdrop-saturate-150 border-b border-slate-200/50 dark:border-white/5 px-6 py-4 flex items-center justify-between shadow-sm">
        <div className="flex items-center gap-3">
          <ObjexiaLogo className="w-10 h-10" />
@@ -314,19 +348,7 @@ export default function Dashboard() {
        </div>
        <div className="flex items-center gap-4">
          <ThemeToggle />
-         {user && <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700"> <Link href={`/profile?from=/dashboard`}> <div className="w-9 h-9 rounded-full bg-[#b3bbea] dark:bg-[#3f407e] border-2 border-white dark:border-slate-700 shadow-sm cursor-pointer overflow-hidden hover:scale-105 hover:shadow-md transition-all"> {user.avatarUrl ? <img src={user.avatarUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[#3f407e] dark:text-[#b3bbea] font-bold text-xs">{user.firstName?.[0] || 'U'}</div>} </div> </Link> <button
-  onClick={logout}
-  className="px-3 py-1.5 
-             border border-red-200/60 dark:border-red-900/40
-             text-red-600 dark:text-red-400
-             bg-red-50/60 dark:bg-red-900/20
-             backdrop-blur-sm
-             rounded-lg text-xs font-semibold
-             shadow-sm hover:shadow-md
-             hover:bg-red-100 dark:hover:bg-red-900/30
-             transition-all duration-200">
-  Sign Out
-</button> </div>}
+         {user && <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700"> <Link href={`/profile?from=/dashboard`}> <div className="w-9 h-9 rounded-full bg-[#b3bbea] dark:bg-[#3f407e] border-2 border-white dark:border-slate-700 shadow-sm cursor-pointer overflow-hidden hover:scale-105 hover:shadow-md transition-all"> {user.avatarUrl ? <img src={user.avatarUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[#3f407e] dark:text-[#b3bbea] font-bold text-xs">{user.firstName?.[0] || 'U'}</div>} </div> </Link> <button onClick={logout} className="px-3 py-1.5 border border-red-200/60 dark:border-red-900/40 text-red-600 dark:text-red-400 bg-red-50/60 dark:bg-red-900/20 backdrop-blur-sm rounded-lg text-xs font-semibold shadow-sm hover:shadow-md hover:bg-red-100 dark:hover:bg-red-900/30 transition-all duration-200">Sign Out</button> </div>}
        </div>
       </header>
 
@@ -340,19 +362,9 @@ export default function Dashboard() {
                 <p className="text-slate-500 dark:text-slate-400">Manage your product strategies in one place.</p> 
             </div>
             
-            {/* UPGRADED PREMIUM BUTTON */}
             <button 
                 onClick={openCreate} 
-                className="
-                    relative overflow-hidden group
-                    px-6 py-3 rounded-xl font-bold text-sm
-                    bg-[#3f407e] text-white
-                    shadow-[0_4px_14px_0_rgb(63,64,126,0.39)] 
-                    hover:shadow-[0_6px_20px_rgba(63,64,126,0.23)] 
-                    hover:-translate-y-[1px]
-                    active:scale-95 active:shadow-inner
-                    transition-all duration-200 ease-out flex items-center gap-2
-                "
+                className="relative overflow-hidden group px-6 py-3 rounded-xl font-bold text-sm bg-[#3f407e] text-white shadow-[0_4px_14px_0_rgb(63,64,126,0.39)] hover:shadow-[0_6px_20px_rgba(63,64,126,0.23)] hover:-translate-y-[1px] active:scale-95 active:shadow-inner transition-all duration-200 ease-out flex items-center gap-2"
             >
                 <span className="relative z-10 flex items-center gap-2">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M12 5v14M5 12h14"/></svg>
@@ -363,58 +375,63 @@ export default function Dashboard() {
         </motion.div>
 
         {isLoading ? (
-<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {[...Array(6)].map((_, i) => (
-            <div key={i} className="bg-white/50 dark:bg-[#1e2126]/50 rounded-2xl border border-slate-200 dark:border-slate-800 h-[220px] p-6 animate-pulse">
-                <div className="flex justify-between mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-slate-200 dark:bg-slate-800" />
-                    <div className="w-24 h-6 bg-slate-100 dark:bg-slate-800/50 rounded-md" />
-                </div>
-                <div className="w-3/4 h-6 bg-slate-200 dark:bg-slate-800 rounded-md mb-3" />
-                <div className="w-full h-4 bg-slate-100 dark:bg-slate-800/50 rounded-md mb-2" />
-                <div className="w-2/3 h-4 bg-slate-100 dark:bg-slate-800/50 rounded-md" />
-                <div className="mt-auto pt-6 border-t border-slate-100 dark:border-slate-800 flex justify-between">
-                    <div className="w-24 h-8 bg-slate-200 dark:bg-slate-800 rounded-lg" />
-                    <div className="w-16 h-8 bg-slate-100 dark:bg-slate-800/50 rounded-lg" />
-                </div>
-            </div>
-        ))}
-    </div>        ) : roadmaps.length === 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...Array(6)].map((_, i) => (
+                    <div key={i} className="bg-white/50 dark:bg-[#1e2126]/50 rounded-2xl border border-slate-200 dark:border-slate-800 h-[220px] p-6 animate-pulse">
+                        <div className="flex justify-between mb-4">
+                            <div className="w-12 h-12 rounded-xl bg-slate-200 dark:bg-slate-800" />
+                            <div className="w-24 h-6 bg-slate-100 dark:bg-slate-800/50 rounded-md" />
+                        </div>
+                        <div className="w-3/4 h-6 bg-slate-200 dark:bg-slate-800 rounded-md mb-3" />
+                        <div className="w-full h-4 bg-slate-100 dark:bg-slate-800/50 rounded-md mb-2" />
+                        <div className="w-2/3 h-4 bg-slate-100 dark:bg-slate-800/50 rounded-md" />
+                    </div>
+                ))}
+            </div>        
+        ) : roadmaps.length === 0 ? (
             <motion.div 
                 initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}
                 className="flex flex-col items-center justify-center py-24 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-3xl bg-slate-50/50 dark:bg-slate-800/30 backdrop-blur-sm"
             >
                 <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 text-slate-300 dark:text-slate-600 shadow-inner"> <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg> </div>
                 <h3 className="text-xl font-bold text-slate-700 dark:text-slate-300 mb-2 tracking-tight">No roadmaps yet</h3> <p className="text-slate-500 mb-8">Create your first roadmap to get started.</p>
-                
-                {/* UPGRADED PREMIUM BUTTON (Empty State) */}
-                <button 
-                    onClick={openCreate} 
-                    className="
-                        relative overflow-hidden group
-                        px-8 py-3 rounded-xl font-bold
-                        bg-[#3f407e] text-white
-                        shadow-[0_4px_14px_0_rgb(63,64,126,0.39)] 
-                        hover:shadow-[0_6px_20px_rgba(63,64,126,0.23)] 
-                        hover:-translate-y-[1px]
-                        active:scale-95 active:shadow-inner
-                        transition-all duration-200 ease-out
-                    "
-                >
+                <button onClick={openCreate} className="relative overflow-hidden group px-8 py-3 rounded-xl font-bold bg-[#3f407e] text-white shadow-[0_4px_14px_0_rgb(63,64,126,0.39)] hover:shadow-[0_6px_20px_rgba(63,64,126,0.23)] hover:-translate-y-[1px] active:scale-95 active:shadow-inner transition-all duration-200 ease-out">
                     <span className="relative z-10 flex items-center gap-2">Create Roadmap</span>
                     <div className="absolute inset-0 h-full w-full bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
                 </button>
             </motion.div>
         ) : (
-            <DndContext onDragEnd={handleDragEnd} sensors={sensors} collisionDetection={closestCenter}>
-                <SortableContext items={roadmaps.map(r => r.id)} strategy={rectSortingStrategy}>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {roadmaps.map((map, index) => ( 
-                            <SortableRoadmapCard key={map.id} map={map} index={index} onDelete={setDeleteId} onEdit={openEdit} /> 
-                        ))}
+            <div className="space-y-12">
+                {/* --- MY ROADMAPS SECTION --- */}
+                {myRoadmaps.length > 0 && (
+                    <div>
+                        <DndContext onDragEnd={handleDragEnd} sensors={sensors} collisionDetection={closestCenter}>
+                            <SortableContext items={myRoadmaps.map(r => r.id)} strategy={rectSortingStrategy}>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {myRoadmaps.map((map, index) => ( 
+                                        <SortableRoadmapCard key={map.id} map={map} index={index} onDelete={setDeleteId} onEdit={openEdit} /> 
+                                    ))}
+                                </div>
+                            </SortableContext>
+                        </DndContext>
                     </div>
-                </SortableContext>
-            </DndContext>
+                )}
+
+                {/* --- SHARED ROADMAPS SECTION --- */}
+                {sharedRoadmaps.length > 0 && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+                        <div className="flex items-center gap-3 mb-6 pt-8 border-t border-slate-200 dark:border-slate-800">
+                            <h2 className="text-xl font-extrabold tracking-tight">Shared With Me</h2>
+                            <span className="px-2.5 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-bold text-xs rounded-full">{sharedRoadmaps.length}</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {sharedRoadmaps.map((map, index) => (
+                                <SharedRoadmapCard key={map.id} map={map} index={index} />
+                            ))}
+                        </div>
+                    </motion.div>
+                )}
+            </div>
         )}
       </main>
 
