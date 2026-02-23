@@ -1,18 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import Script from 'next/script' 
 import { motion, AnimatePresence } from 'framer-motion'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation' // <--- ADDED useSearchParams
 import { useAuth } from '../context/AuthContext'
 import ThemeToggle from '../components/ThemeToggle'
 import ObjexiaLogo from '../components/ObjexiaLogo'
 
-// --- HELPER COMPONENT (With Smart Validation) ---
-const InputField = ({ 
-    label, type = "text", placeholder, value, onChange, onBlur, icon, error, className = "", rightElement
-}: any) => {
+const InputField = ({ label, type = "text", placeholder, value, onChange, onBlur, icon, error, className = "", rightElement }: any) => {
     const [showPassword, setShowPassword] = useState(false);
     const isPassword = type === "password";
     const actualType = isPassword ? (showPassword ? "text" : "password") : type;
@@ -23,7 +20,6 @@ const InputField = ({
                 <label className={`block text-[10px] font-bold uppercase tracking-wider transition-colors ${error ? 'text-red-500' : 'text-slate-500 dark:text-slate-400'}`}>
                     {label}
                 </label>
-                {/* Optional Right Element (e.g. Forgot Password) OR Error Message */}
                 {rightElement ? rightElement : (error && <span className="text-[10px] font-bold text-red-500 animate-pulse">{error}</span>)}
             </div>
             
@@ -62,7 +58,6 @@ const InputField = ({
     );
 };
 
-// --- ENHANCED GOOGLE BUTTON (Theme Aware & Border Fix) ---
 function GoogleLoginBtn({ onSuccess, text = "signin_with" }: { onSuccess: (cred: string) => void, text?: string }) {
   const [theme, setTheme] = useState<'outline' | 'filled_black'>('outline');
 
@@ -92,14 +87,7 @@ function GoogleLoginBtn({ onSuccess, text = "signin_with" }: { onSuccess: (cred:
                 });
                 (window as any).google.accounts.id.renderButton(
                     document.getElementById("googleBtnLogin"),
-                    { 
-                        theme: theme, 
-                        size: "large", 
-                        width: "100%", 
-                        text: text, 
-                        shape: "pill",
-                        logo_alignment: "left"
-                    } 
+                    { theme: theme, size: "large", width: "100%", text: text, shape: "pill", logo_alignment: "left" } 
                 );
             } catch (error) { console.error("Google Sign-In Error:", error); }
         }
@@ -115,7 +103,6 @@ function GoogleLoginBtn({ onSuccess, text = "signin_with" }: { onSuccess: (cred:
     return () => clearInterval(checkInterval);
   }, [onSuccess, theme, text]);
 
-  // --- FIXED: Explicit Border Container ---
   return (
       <div className="w-full h-[42px] rounded-full overflow-hidden border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#131314] flex items-center justify-center">
           <div id="googleBtnLogin" className="w-full"></div>
@@ -123,9 +110,12 @@ function GoogleLoginBtn({ onSuccess, text = "signin_with" }: { onSuccess: (cred:
   );
 }
 
-export default function LoginPage() {
+function LoginForm() {
     const { login } = useAuth()
     const router = useRouter()
+    const searchParams = useSearchParams() // <--- GET PARAMS
+    const redirectUrl = searchParams.get('redirect') || '/dashboard' // <--- SET REDIRECT URL
+    
     const [formData, setFormData] = useState({ email: '', password: '' })
     const [touched, setTouched] = useState<Record<string, boolean>>({})
     const [error, setError] = useState<string | null>(null)
@@ -142,7 +132,7 @@ export default function LoginPage() {
             const data = await res.json();
             if (res.ok) {
                 localStorage.setItem('roadmap_user', JSON.stringify(data.user));
-                window.location.href = '/dashboard';
+                window.location.href = redirectUrl; // <--- REDIRECT HERE
             } else { setError(data.error || "Google login failed"); }
         } catch (e) { setError("Network error during Google login"); } 
         finally { setIsLoading(false); }
@@ -152,14 +142,12 @@ export default function LoginPage() {
         e.preventDefault()
         setTouched({ email: true, password: true });
 
-        if(!formData.email || !formData.password) {
-            return;
-        }
+        if(!formData.email || !formData.password) return;
 
         setError(null); setIsLoading(true);
         try {
             await login(formData.email, formData.password)
-            router.push('/dashboard')
+            router.push(redirectUrl) // <--- REDIRECT HERE
         } catch (err: any) { setError(err.message || 'Invalid email or password') } 
         finally { setIsLoading(false) }
     }
@@ -178,7 +166,6 @@ export default function LoginPage() {
             <div className="absolute -bottom-[20%] -right-[10%] w-[50%] h-[50%] bg-blue-400/10 dark:bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
             
             <Script src="https://accounts.google.com/gsi/client" strategy="lazyOnload" />
-            
             <div className="absolute top-6 right-6 z-50"> <ThemeToggle /> </div>
 
             <motion.div 
@@ -189,7 +176,6 @@ export default function LoginPage() {
             >
                 <div className="p-8">
                     <div className="text-center mb-8">
-                        {/* --- ENHANCED LOGO CONTAINER --- */}
                         <div className="inline-flex justify-center items-center mb-4 p-3 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-[0_0_20px_rgba(63,64,126,0.15)] dark:shadow-[0_0_25px_rgba(179,187,234,0.1)]">
                             <ObjexiaLogo className="w-12 h-12 mt-2" />
                         </div>
@@ -209,30 +195,16 @@ export default function LoginPage() {
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <InputField 
-                            label="Email Address" 
-                            type="email" 
-                            placeholder="name@company.com" 
-                            value={formData.email} 
-                            onChange={(e: any) => setFormData({...formData, email: e.target.value})}
-                            onBlur={() => handleBlur('email')}
-                            error={hasError('email')}
+                            label="Email Address" type="email" placeholder="name@company.com" value={formData.email} 
+                            onChange={(e: any) => setFormData({...formData, email: e.target.value})} onBlur={() => handleBlur('email')} error={hasError('email')}
                             icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>}
                         />
 
                         <InputField 
-                            label="Password" 
-                            type="password" 
-                            placeholder="••••••••" 
-                            value={formData.password} 
-                            onChange={(e: any) => setFormData({...formData, password: e.target.value})}
-                            onBlur={() => handleBlur('password')}
-                            error={hasError('password')}
+                            label="Password" type="password" placeholder="••••••••" value={formData.password} 
+                            onChange={(e: any) => setFormData({...formData, password: e.target.value})} onBlur={() => handleBlur('password')} error={hasError('password')}
                             icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>}
-                            rightElement={
-                                <Link href="/forgot-password" className="text-[10px] font-bold text-[#3f407e] dark:text-[#b3bbea] hover:underline">
-                                    Forgot password?
-                                </Link>
-                            }
+                            rightElement={ <Link href="/forgot-password" className="text-[10px] font-bold text-[#3f407e] dark:text-[#b3bbea] hover:underline"> Forgot password? </Link> }
                         />
 
                         <button type="submit" disabled={isLoading} className="w-full py-3 bg-[#3f407e] hover:bg-[#323366] text-white font-bold rounded-lg shadow-lg shadow-[#3f407e]/20 transition-all flex items-center justify-center gap-2 transform hover:-translate-y-0.5 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none mt-2 text-sm">
@@ -254,10 +226,18 @@ export default function LoginPage() {
                     </div>
 
                     <div className="text-center text-xs text-slate-500 dark:text-slate-400 font-medium">
-                        Don't have an account? <Link href="/signup" className="text-[#3f407e] dark:text-[#b3bbea] font-bold hover:underline ml-1">Create one</Link>
+                        Don't have an account? <Link href={`/signup${redirectUrl !== '/dashboard' ? `?redirect=${redirectUrl}` : ''}`} className="text-[#3f407e] dark:text-[#b3bbea] font-bold hover:underline ml-1">Create one</Link>
                     </div>
                 </div>
             </motion.div>
         </div>
+    )
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={<div className="h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-[#0f1115]"><div className="animate-pulse font-bold text-[#3f407e]">Loading...</div></div>}>
+            <LoginForm />
+        </Suspense>
     )
 }

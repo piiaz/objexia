@@ -118,6 +118,7 @@ model RoadmapAccess {
   roadmapId String
   userId    String
   role      Role     @default(VIEWER)
+  status    String   @default("PENDING")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -101,8 +101,6 @@ function SharedRoadmapCard({ map, index }: { map: any, index: number }) {
                     <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-bold text-xl shadow-md overflow-hidden shrink-0 border border-white/10">
                         {map.avatarUrl ? ( <img src={map.avatarUrl} alt="Icon" className="w-full h-full object-cover" /> ) : ( <span>{map.title[0].toUpperCase()}</span> )}
                     </div>
-                    
-                    {/* Owner Badge */}
                     <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/20 px-2.5 py-1.5 rounded-lg border border-blue-100 dark:border-blue-900/50">
                         <div className="w-4 h-4 rounded-full overflow-hidden bg-blue-200 flex items-center justify-center text-[8px] font-bold text-blue-700">
                             {map.user?.avatarUrl ? <img src={map.user.avatarUrl} className="w-full h-full object-cover"/> : map.user?.firstName?.[0]}
@@ -126,6 +124,44 @@ function SharedRoadmapCard({ map, index }: { map: any, index: number }) {
             </div>
         </motion.div>
     )
+}
+
+// --- NEW: INVITATION CARD ---
+function InvitationCard({ map, index, onAction }: { map: any, index: number, onAction: (roadmapId: string, action: 'ACCEPT' | 'REJECT') => void }) {
+    return (
+        <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3, delay: index * 0.1 }}
+            className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-amber-50/50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 rounded-2xl shadow-sm"
+        >
+            <div className="flex items-center gap-4 mb-4 sm:mb-0">
+                <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-white dark:border-slate-800 shadow-sm shrink-0 bg-amber-200 flex items-center justify-center font-bold text-amber-700">
+                    {map.user?.avatarUrl ? <img src={map.user.avatarUrl} className="w-full h-full object-cover"/> : map.user?.firstName?.[0]}
+                </div>
+                <div>
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                        <span className="text-amber-600 dark:text-amber-400">{map.user?.firstName}</span> invited you to collaborate
+                    </h4>
+                    <p className="text-xs text-slate-500 font-medium">Board: <span className="font-bold text-slate-700 dark:text-slate-300">{map.title}</span></p>
+                </div>
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button 
+                    onClick={() => onAction(map.id, 'REJECT')} 
+                    className="flex-1 sm:flex-none px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-bold rounded-xl transition-colors"
+                >
+                    Decline
+                </button>
+                <button 
+                    onClick={() => onAction(map.id, 'ACCEPT')} 
+                    className="flex-1 sm:flex-none px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95"
+                >
+                    Accept Invite
+                </button>
+            </div>
+        </motion.div>
+    );
 }
 
 export default function Dashboard() {
@@ -171,9 +207,46 @@ export default function Dashboard() {
 
   useEffect(() => { if (user?.id) fetchRoadmaps() }, [user])
 
-  // --- Filter roadmaps by ownership ---
+  // --- FILTER ROADMAPS BY OWNERSHIP AND STATUS ---
   const myRoadmaps = roadmaps.filter(r => r.userId === user?.id);
-  const sharedRoadmaps = roadmaps.filter(r => r.userId !== user?.id);
+  
+  // They only show in the main grid if they are ACCEPTED
+  const sharedRoadmaps = roadmaps.filter(r => 
+      r.userId !== user?.id && r.collaborators?.[0]?.status === 'ACCEPTED'
+  );
+  
+  // They show up top if they are PENDING
+  const pendingInvites = roadmaps.filter(r => 
+      r.userId !== user?.id && r.collaborators?.[0]?.status === 'PENDING'
+  );
+
+  const handleInvitationAction = async (roadmapId: string, action: 'ACCEPT' | 'REJECT') => {
+      if (!user?.id) return;
+      try {
+          const res = await fetch('/api/roadmaps/invitations', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ roadmapId, userId: user.id, action })
+          });
+          
+          if (!res.ok) throw new Error("Failed action");
+          
+          if (action === 'ACCEPT') {
+              // Optimistically update the UI to move it to "Shared With Me"
+              setRoadmaps(prev => prev.map(r => r.id === roadmapId ? {
+                  ...r,
+                  collaborators: [{ ...r.collaborators[0], status: 'ACCEPTED' }]
+              } : r));
+              toast.success("Invitation accepted!");
+          } else {
+              // Optimistically remove it completely
+              setRoadmaps(prev => prev.filter(r => r.id !== roadmapId));
+              toast.success("Invitation declined.");
+          }
+      } catch (e) {
+          toast.error("Failed to process invitation");
+      }
+  }
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
@@ -185,7 +258,7 @@ export default function Dashboard() {
             const newOrder = arrayMove(myRoadmaps, oldIndex, newIndex);
             
             // Re-merge lists so state stays in sync
-            setRoadmaps([...newOrder, ...sharedRoadmaps]);
+            setRoadmaps([...newOrder, ...sharedRoadmaps, ...pendingInvites]);
 
             try {
                 const updates = newOrder.map((r, idx) => ({ id: r.id, order: idx }));
@@ -195,7 +268,6 @@ export default function Dashboard() {
                     body: JSON.stringify({ roadmaps: updates })
                 });
             } catch (e) {
-                console.error("Failed to save reorder", e);
                 toast.error("Failed to save new order");
             }
         }
@@ -284,7 +356,6 @@ export default function Dashboard() {
         } : r))
         
     } catch (error: any) {
-        console.error("Failed to save roadmap changes", error);
         if (error.message !== "Duplicate name") {
            setEditFormError("Failed to save changes. Please try again.");
         }
@@ -300,7 +371,6 @@ export default function Dashboard() {
           toast.success("Roadmap deleted successfully");
           setDeleteId(null);
       } catch (e) { 
-          console.error(e); 
           toast.error("Failed to delete roadmap");
       }
   }
@@ -328,7 +398,6 @@ export default function Dashboard() {
             setAvatarUrl(compressedBase64);
             setFormError(null);
         } catch (err) {
-            console.error("Compression failed", err);
             setFormError("Failed to process image. Try a different one.");
         }
     }
@@ -402,6 +471,22 @@ export default function Dashboard() {
             </motion.div>
         ) : (
             <div className="space-y-12">
+                
+                {/* --- PENDING INVITATIONS --- */}
+                {pendingInvites.length > 0 && (
+                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-10">
+                        <h2 className="text-sm font-bold text-amber-600 dark:text-amber-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.9 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+                            Action Required ({pendingInvites.length})
+                        </h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {pendingInvites.map((map, i) => (
+                                <InvitationCard key={map.id} map={map} index={i} onAction={handleInvitationAction} />
+                            ))}
+                        </div>
+                    </motion.div>
+                )}
+
                 {/* --- MY ROADMAPS SECTION --- */}
                 {myRoadmaps.length > 0 && (
                     <div>

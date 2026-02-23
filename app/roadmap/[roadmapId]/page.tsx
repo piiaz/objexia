@@ -1,37 +1,41 @@
 'use client'
 
-import { useParams } from 'next/navigation'
+import { useEffect } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import { LiveblocksProvider, RoomProvider, ClientSideSuspense } from '@liveblocks/react'
 import { useAuth } from '../../context/AuthContext'
 import Timeline from '../../components/Timeline'
 
 export default function RoadmapPage() {
   const params = useParams()
-  const { user } = useAuth()
+  const router = useRouter()
+  const { user, isLoading } = useAuth()
   
-  // Ensure roadmapId is a string
-  const rawId = params.roadmapId
+  const rawId = params?.roadmapId
   const roadmapId = Array.isArray(rawId) ? rawId[0] : rawId
 
-  if (!roadmapId) {
+  // Redirect to login if they have no account, passing the roadmap URL so they come back after!
+  useEffect(() => {
+    if (!isLoading && !user && roadmapId) {
+      router.push(`/login?redirect=/roadmap/${roadmapId}`);
+    }
+  }, [user, isLoading, router, roadmapId])
+
+  // If no roadmapId exists yet, or still checking auth
+  if (!roadmapId || isLoading || !user) {
     return (
       <div className="flex items-center justify-center h-screen bg-slate-50 dark:bg-[#191b19]">
-        <div className="text-slate-400 font-bold">Loading Board...</div>
+        <div className="text-[#3f407e] font-bold animate-pulse">Authenticating...</div>
       </div>
     )
   }
 
-  // If the user isn't logged in yet, just show the timeline normally 
-  // (Your AuthBarrierModal inside Timeline will handle telling them to log in)
-  if (!user) {
-    return <Timeline roadmapId={roadmapId} />
-  }
+  // Tell TypeScript strictly that this is a string to clear the error
+  const safeRoadmapId = roadmapId as string;
 
-  // If they are logged in, connect them to the Liveblocks Room!
   return (
     <LiveblocksProvider 
       authEndpoint={async (room) => {
-        // Ping our custom Bouncer API
         const res = await fetch("/api/liveblocks-auth", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -40,16 +44,13 @@ export default function RoadmapPage() {
         return await res.json();
       }}
     >
-      <RoomProvider 
-        id={roadmapId} 
-        initialPresence={{ cursor: null }} // We will use this for live mouse cursors next!
-      >
+      <RoomProvider id={safeRoadmapId} initialPresence={{ cursor: null }}>
         <ClientSideSuspense fallback={
           <div className="flex items-center justify-center h-screen bg-slate-50 dark:bg-[#191b19]">
             <div className="text-[#3f407e] font-bold animate-pulse">Connecting to live room...</div>
           </div>
         }>
-          {() => <Timeline roadmapId={roadmapId} />}
+          {() => <Timeline roadmapId={safeRoadmapId} />}
         </ClientSideSuspense>
       </RoomProvider>
     </LiveblocksProvider>

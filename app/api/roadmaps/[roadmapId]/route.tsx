@@ -1,16 +1,12 @@
-// app/api/roadmaps/[roadmapId]/route.ts
-
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 
-// 1. GET
+// 1. GET Single Roadmap
 export async function GET(
   req: Request, 
   { params }: { params: Promise<{ roadmapId: string }> }
 ) {
   const { roadmapId } = await params;
-  
-  // Grab the userId from the URL query params
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get('userId');
 
@@ -23,7 +19,7 @@ export async function GET(
         lanes: { orderBy: { order: 'asc' } },
         items: true,
         milestones: true,
-        collaborators: true, // <--- We need this to check their role
+        collaborators: true, 
       }
     });
 
@@ -37,22 +33,27 @@ export async function GET(
       role = 'OWNER';
     } else {
       const access = roadmap.collaborators.find(c => c.userId === userId);
-      if (access) role = access.role;
+      if (access) {
+          // If they haven't accepted the invite yet on their dashboard, block them!
+          if (access.status === 'PENDING') {
+              return NextResponse.json({ error: 'Invitation pending' }, { status: 403 });
+          }
+          role = access.role;
+      }
     }
 
-    // If they aren't the owner and aren't in the collaborators list, block them.
     if (role === 'NONE') {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Send the roadmap data PLUS the user's role
+    // Send the roadmap data PLUS the user's role so the frontend unlocks the buttons
     return NextResponse.json({ ...roadmap, currentUserRole: role });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to load roadmap' }, { status: 500 });
   }
 }
 
-// 2. PATCH
+// 2. PATCH Roadmap Details
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ roadmapId: string }> }
@@ -78,12 +79,11 @@ export async function PATCH(
 
     return NextResponse.json(updatedRoadmap);
   } catch (error) {
-    console.error("Update Error:", error);
     return NextResponse.json({ error: 'Failed to update roadmap' }, { status: 500 });
   }
 }
 
-// 3. DELETE
+// 3. DELETE Roadmap
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ roadmapId: string }> }

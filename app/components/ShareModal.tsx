@@ -287,16 +287,23 @@ export default function ShareModal({ isOpen, onClose, roadmapId }: Props) {
                     )}
 
                     {/* Guests */}
-                    {collaborators.map((collab) => (
+{/* Guests */}
+                    {collaborators.map((collab: any) => (
                       <div key={collab.id} className="flex items-center justify-between group p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold text-xs overflow-hidden border border-white/10 shadow-sm shrink-0">
                             {collab.user.avatarUrl ? <img src={collab.user.avatarUrl} className="w-full h-full object-cover" alt="Collaborator" /> : collab.user.firstName[0]}
                           </div>
                           <div>
-                            <p className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-tight">
-                              {collab.user.firstName} {currentUser?.id === collab.user.id ? '(You)' : ''}
-                            </p>
+                            <div className="flex items-center gap-2">
+                                <p className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-tight">
+                                  {collab.user.firstName} {currentUser?.id === collab.user.id ? '(You)' : ''}
+                                </p>
+                                {/* NEW: PENDING BADGE */}
+                                {collab.status === 'PENDING' && (
+                                    <span className="text-[8px] font-bold uppercase tracking-widest bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400 px-1.5 py-0.5 rounded-md">Pending</span>
+                                )}
+                            </div>
                             <p className="text-xs text-slate-500 font-medium">{collab.user.email}</p>
                           </div>
                         </div>
