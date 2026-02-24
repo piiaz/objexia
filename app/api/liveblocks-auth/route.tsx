@@ -11,16 +11,11 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { room, userId } = body;
 
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-    // If a specific room is requested, check permissions
     if (room) {
       const roadmap = await prisma.roadmap.findUnique({
         where: { id: room },
@@ -39,10 +34,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // Prepare Liveblocks session
+    // THE FIX: Added user.email and lastName to the Liveblocks session payload
     const session = liveblocks.prepareSession(user.id, {
       userInfo: {
-        name: user.firstName,
+        name: user.lastName ? `${user.firstName} ${user.lastName}` : user.firstName,
+        email: user.email, 
         avatar: user.avatarUrl || `https://ui-avatars.com/api/?name=${user.firstName}&background=3f407e&color=fff`,
         color: ["#FF5733", "#33FF57", "#3357FF", "#F033FF", "#FF33A8"][Math.floor(Math.random() * 5)]
       }
@@ -54,7 +50,6 @@ export async function POST(request: Request) {
 
     const { status, body: authBody } = await session.authorize();
     
-    // Return the successful auth token properly formatted
     return new NextResponse(authBody, { 
         status, 
         headers: { 'Content-Type': 'application/json' } 

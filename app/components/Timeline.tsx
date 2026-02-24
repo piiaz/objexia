@@ -60,7 +60,7 @@ function DroppableLane({ groupId, height, rowIndex, headerRows }: { groupId: str
   )
 }
 
-// --- NEW COMPONENT: LIVE CURSORS ---
+// --- NEW COMPONENT: RELATIVE LIVE CURSORS WITH ACTIVITY ---
 function LiveCursors() {
     const others = useOthers();
     
@@ -71,7 +71,8 @@ function LiveCursors() {
                 return (
                     <motion.div
                         key={connectionId}
-                        className="fixed top-0 left-0 pointer-events-none z-[9999]"
+                        // absolute top-0 left-0 makes it position relative to the scrollable grid container!
+                        className="absolute top-0 left-0 pointer-events-none z-[9999]"
                         animate={{ x: presence.cursor.x, y: presence.cursor.y }}
                         transition={{ type: "spring", damping: 30, mass: 0.5, stiffness: 400 }}
                     >
@@ -79,15 +80,67 @@ function LiveCursors() {
                             <path d="M5.65376 12.3673H5.46026L5.31717 12.4976L0.500002 16.8829L0.500002 1.19841L11.7841 12.3673H5.65376Z" fill={info?.color || "#3f407e"}/>
                         </svg>
                         <div 
-                            className="px-2 py-1 text-xs font-bold rounded-md shadow-md ml-4 mt-2 whitespace-nowrap" 
+                            className="px-2 py-1 text-xs font-bold rounded-md shadow-md ml-4 mt-2 flex flex-col whitespace-nowrap" 
                             style={{ backgroundColor: info?.color || '#3f407e', color: '#fff' }}
                         >
-                            {info?.name || 'Anonymous'}
+                            <span>{info?.name || 'Anonymous'}</span>
+                            {/* Display what they are currently editing if applicable */}
+                            {presence?.activity && (
+                                <span className="text-[9px] font-medium opacity-80 mt-0.5">{presence.activity}</span>
+                            )}
                         </div>
                     </motion.div>
                 );
             })}
         </>
+    );
+}
+
+// --- NEW COMPONENT: RICH USER PROFILE HOVER CARDS ---
+function ActiveUserAvatar({ info, presence }: { info: any, presence: any }) {
+    return (
+        <div className="relative group/avatar cursor-pointer shrink-0">
+            {/* Avatar Ring */}
+            <div 
+                className="w-8 h-8 rounded-full border-2 border-white dark:border-[#191b19] overflow-hidden shadow-sm z-10 transition-transform group-hover/avatar:scale-110" 
+                style={{ backgroundColor: info?.color || '#3f407e' }}
+            >
+                {info?.avatar 
+                    ? <img src={info.avatar} className="w-full h-full object-cover" /> 
+                    : <div className="w-full h-full flex justify-center items-center text-white text-xs font-bold">{info?.name?.[0] || '?'}</div>
+                }
+            </div>
+
+            {/* Dropdown Profile Card */}
+            <div className="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-[#1e2126] border border-slate-100 dark:border-slate-800 rounded-xl shadow-xl opacity-0 invisible group-hover/avatar:opacity-100 group-hover/avatar:visible transition-all duration-200 z-[200] p-3 transform origin-top-right scale-95 group-hover/avatar:scale-100">
+                <div className="flex items-center gap-3 mb-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                    <div className="w-10 h-10 rounded-full overflow-hidden shrink-0" style={{ backgroundColor: info?.color || '#3f407e' }}>
+                        {info?.avatar ? <img src={info.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full flex justify-center items-center text-white font-bold">{info?.name?.[0] || '?'}</div>}
+                    </div>
+                    <div className="overflow-hidden">
+                        <div className="text-sm font-bold text-slate-900 dark:text-white truncate">{info?.name || 'Anonymous'}</div>
+                        <div className="text-[10px] text-slate-500 truncate">{info?.email || 'Unknown email'}</div>
+                    </div>
+                </div>
+                <div>
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Current Status</div>
+                    {presence?.activity ? (
+                        <div className="text-xs text-[#3f407e] dark:text-[#b3bbea] font-medium flex items-center gap-2 bg-[#3f407e]/5 dark:bg-[#b3bbea]/10 p-2 rounded-lg leading-tight">
+                            <span className="relative flex h-2 w-2 shrink-0">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#3f407e] dark:bg-[#b3bbea] opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#3f407e] dark:bg-[#b3bbea]"></span>
+                            </span>
+                            <span className="truncate">{presence.activity}</span>
+                        </div>
+                    ) : (
+                        <div className="text-xs text-slate-500 italic flex items-center gap-2 px-1">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            Viewing roadmap
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
     );
 }
 
@@ -150,7 +203,7 @@ export default function Timeline({ roadmapId }: Props) {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload)
           });
-          broadcast({ type: 'REFETCH' }); // Tell others the view settings changed
+          broadcast({ type: 'REFETCH' }); 
       } catch (e) {
           console.error("Failed to auto-save view settings", e);
       }
@@ -219,13 +272,11 @@ export default function Timeline({ roadmapId }: Props) {
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 }, disabled: !canEdit })
   )
 
-  // --- REFACTORED DATA LOADING (With Silent Refetch for Real-time) ---
-const loadRoadmapData = useCallback(async (silent = false) => {
+  const loadRoadmapData = useCallback(async (silent = false) => {
     if (!roadmapId || !user?.id) return;
     if (!silent) setIsLoading(true);
     
     try { 
-      // THE FIX: Added a timestamp (t) and no-store cache to force fresh DB data!
       const res = await fetch(`/api/roadmaps/${roadmapId}?userId=${user.id}&t=${Date.now()}`, {
           cache: 'no-store'
       }); 
@@ -241,6 +292,7 @@ const loadRoadmapData = useCallback(async (silent = false) => {
         if (data.showWeekends !== undefined) setShowWeekends(data.showWeekends);
         
         setUserRole(data.currentUserRole); 
+
       } else if (res.status === 401 || res.status === 403) {
         toast.error("You don't have permission to view this board.");
         router.push('/dashboard');
@@ -252,7 +304,6 @@ const loadRoadmapData = useCallback(async (silent = false) => {
     }
   }, [roadmapId, user, router]);
 
-  // Initial Load
   useEffect(() => {
     if (!authLoading) {
         if (user) { loadRoadmapData(); } 
@@ -260,13 +311,10 @@ const loadRoadmapData = useCallback(async (silent = false) => {
     }
   }, [authLoading, user, loadRoadmapData]);
 
-  // --- LIVEBLOCKS: LISTEN FOR OTHERS' CHANGES ---
-useEventListener(({ event }) => {
-    // Tell TypeScript we expect an object with a 'type' string
+  useEventListener(({ event }) => {
     const liveEvent = event as { type: string }; 
-    
     if (liveEvent.type === 'REFETCH') {
-        loadRoadmapData(true); // Fetch new data silently in the background
+        loadRoadmapData(true); 
     }
   });
 
@@ -280,6 +328,17 @@ useEventListener(({ event }) => {
 
   const toggleSidebar = () => { const newState = !sidebarOpen; setSidebarOpen(newState); localStorage.setItem('objexia_sidebar_state', String(newState)); }
   const checkAuth = (action: () => void) => { if (user) { action(); } else { setIsAuthBarrierOpen(true); } }
+
+  // --- UI INTERACTION ACTIVITY TRIGGERS ---
+  const closeAllModals = () => {
+      setIsModalOpen(false);
+      setMilestoneModalOpen(false);
+      setLaneManagerMode(null);
+      setIsShareModalOpen(false);
+      setEditingItem(null);
+      setCurrentMilestoneData(null);
+      updateMyPresence({ activity: null }); // Clear activity status
+  }
 
   const handleDateChange = (type: 'start' | 'end', date: string) => {
       const newRange = { ...dateRange, [type]: date };
@@ -298,7 +357,7 @@ useEventListener(({ event }) => {
         const updates = newGroups.map((g, idx) => ({ id: g.id, order: idx })); 
         await fetch('/api/lanes', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lanes: updates }) }); 
         toast.success("Tracks reordered", { id: 'reorder-lanes' });
-        broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+        broadcast({ type: 'REFETCH' }); 
       } catch (e) { setGroups(previousGroups); toast.error("Failed to reorder lanes"); }
   }
 
@@ -310,7 +369,7 @@ useEventListener(({ event }) => {
       if (res.ok) { 
           setGroups([...groups, data.lane]); 
           toast.success("Track created"); 
-          broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+          broadcast({ type: 'REFETCH' }); 
       }
     } catch (e) { toast.error("Failed to create track"); }
   }
@@ -321,7 +380,7 @@ useEventListener(({ event }) => {
     try { 
         await fetch(`/api/lanes/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); 
         toast.success("Track updated"); 
-        broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+        broadcast({ type: 'REFETCH' }); 
     } catch (e) { toast.error("Failed to update track"); }
   }
 
@@ -331,7 +390,7 @@ useEventListener(({ event }) => {
     try { 
         await fetch(`/api/lanes/${id}`, { method: 'DELETE' }); 
         toast.success("Track deleted"); 
-        broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+        broadcast({ type: 'REFETCH' }); 
     } catch (e) { toast.error("Failed to delete track"); }
   }
 
@@ -343,23 +402,23 @@ useEventListener(({ event }) => {
     const optimisticItem = { ...itemData, id: itemId, trackIndex };
     if (isUpdate) { setItems(prev => prev.map(i => i.id === itemId ? optimisticItem : i)); } 
     else { setItems(prev => [...prev, optimisticItem]); }
-    setEditingItem(null); setIsModalOpen(false);
+    closeAllModals(); // Close and reset presence
     try { 
       const method = isUpdate ? 'PATCH' : 'POST'; 
       const url = isUpdate ? `/api/items/${itemId}` : '/api/items'; 
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...itemData, roadmapId, trackIndex }) }); 
       if (!res.ok) throw new Error();
       toast.success(isUpdate ? "Item updated" : "Item created");
-      broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+      broadcast({ type: 'REFETCH' }); 
     } catch (error) { toast.error("Failed to save item"); }
   }
 
   const handleDeleteItem = async () => { 
-    if (!canEdit || !editingItem) return; const id = editingItem.id; setItems(prev => prev.filter(i => i.id !== id)); setIsModalOpen(false); setEditingItem(null); 
+    if (!canEdit || !editingItem) return; const id = editingItem.id; setItems(prev => prev.filter(i => i.id !== id)); closeAllModals(); 
     try { 
         await fetch(`/api/items/${id}`, { method: 'DELETE' }); 
         toast.success("Item deleted"); 
-        broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+        broadcast({ type: 'REFETCH' }); 
     } catch (e) { toast.error("Failed to delete item"); } 
   }
   
@@ -367,22 +426,22 @@ useEventListener(({ event }) => {
       if (!canEdit) return;
       const isNew = !data.id; const optimistic = { ...data, id: data.id || Math.random().toString(), trackIndex: data.trackIndex || 0, roadmapId } as Milestone; 
       if (!isNew) setMilestones(prev => prev.map(m => m.id === optimistic.id ? optimistic : m)); else setMilestones(prev => [...prev, optimistic]); 
-      setMilestoneModalOpen(false); setCurrentMilestoneData(null); 
+      closeAllModals(); 
       try { 
           const method = isNew ? 'POST' : 'PATCH'; const url = isNew ? '/api/milestones' : `/api/milestones/${data.id}`; 
           await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...data, roadmapId }) }); 
           toast.success(isNew ? "Milestone added" : "Milestone updated");
-          broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+          broadcast({ type: 'REFETCH' }); 
       } catch (e) { toast.error("Failed to save milestone"); } 
   }
 
   const handleDeleteMilestone = async (id: string) => { 
     if (!canEdit) return;
-    setMilestones(prev => prev.filter(m => m.id !== id)); setMilestoneModalOpen(false); 
+    setMilestones(prev => prev.filter(m => m.id !== id)); closeAllModals(); 
     try { 
         await fetch(`/api/milestones/${id}`, { method: 'DELETE' }); 
         toast.success("Milestone deleted"); 
-        broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+        broadcast({ type: 'REFETCH' }); 
     } catch (e) { toast.error("Failed to delete milestone"); } 
   }
 
@@ -406,7 +465,7 @@ useEventListener(({ event }) => {
             try { 
                 await fetch(`/api/items/${itemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ startDate: updatedItem.startDate, endDate: updatedItem.endDate }) }); 
                 toast.success("Item resized", { id: 'resize-item' }); 
-                broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+                broadcast({ type: 'REFETCH' }); 
             } catch(e) { toast.error("Failed to resize item"); }
         }
         return;
@@ -425,7 +484,7 @@ useEventListener(({ event }) => {
         try { 
             await fetch(`/api/milestones/${milestone.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: optimisticMilestone.date, trackIndex: optimisticMilestone.trackIndex }) }); 
             toast.success("Milestone moved", { id: 'move-milestone' }); 
-            broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+            broadcast({ type: 'REFETCH' }); 
         } catch (e) { toast.error("Failed to move milestone"); }
         return;
     }
@@ -440,7 +499,7 @@ useEventListener(({ event }) => {
         try { 
             await fetch(`/api/items/${item.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ startDate: optimistic.startDate, endDate: optimistic.endDate, trackIndex: optimistic.trackIndex, groupId: optimistic.groupId }) }); 
             toast.success("Item moved", { id: 'move-item' }); 
-            broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+            broadcast({ type: 'REFETCH' }); 
         } catch(e) { toast.error("Failed to move item"); }
     }
   }
@@ -448,16 +507,15 @@ useEventListener(({ event }) => {
   const handleExport = () => { checkAuth(() => { const csv = generateCsvContent(groups, items, milestones); const blob = new Blob([csv], {type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='roadmap.csv'; a.click(); }) }
   const handleImportClick = () => { if (!canEdit) return; checkAuth(() => fileInputRef.current?.click()) }
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => { const file=e.target.files?.[0]; if(!file)return; const r=new FileReader(); r.onload=(ev)=>{ const t=ev.target?.result; if(typeof t==='string'){ try { const p=parseCsvContent(t); if(p.groups.length>0){ setPendingImportData(p); setImportConfirmOpen(true); } else { toast.error("No valid data found in CSV"); } } catch(e) { toast.error("Invalid CSV format"); } } }; r.readAsText(file); e.target.value=''; }
-const confirmImport = async () => { 
+  
+  const confirmImport = async () => { 
       if(pendingImportData){ 
           try {
-              // THE FIX: Actually send the data to the server!
               const res = await fetch(`/api/roadmaps/${roadmapId}/import`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify(pendingImportData)
               });
-
               if (!res.ok) throw new Error("Failed to save imported data");
 
               setGroups(pendingImportData.groups); 
@@ -473,11 +531,12 @@ const confirmImport = async () => {
       } 
   }
   
-  const handleEditLane = (group: Group) => { if (!canEdit) return; checkAuth(() => { setEditingLaneId(group.id); setLaneManagerMode('manage'); }) }
-  const openNewItemModal = () => { if (!canEdit) return; checkAuth(() => { setEditingItem(null); setIsModalOpen(true); }) }
-  const handleItemClick = (item: Item) => { if (!canEdit) return; checkAuth(() => { setEditingItem(item); setIsModalOpen(true); }) }
-  const handleMilestoneClick = (dayIndex: number, groupId: string) => { if (!canEdit) return; checkAuth(() => { const date = addDays(roadmapStart, dayIndex); setCurrentMilestoneData({ title: '', date: format(date, 'yyyy-MM-dd'), groupId, icon: 'diamond', color: 'text-slate-600', roadmapId }); setMilestoneModalOpen(true) }) }
-  const handleEditMilestone = (milestone: Milestone) => { if (!canEdit) return; checkAuth(() => { setCurrentMilestoneData(milestone); setMilestoneModalOpen(true); }) }
+  // MODAL HANDLERS - Now emitting live activity status!
+  const handleEditLane = (group: Group) => { if (!canEdit) return; checkAuth(() => { setEditingLaneId(group.id); setLaneManagerMode('manage'); updateMyPresence({ activity: `Configuring Tracks` }); }) }
+  const openNewItemModal = () => { if (!canEdit) return; checkAuth(() => { setEditingItem(null); setIsModalOpen(true); updateMyPresence({ activity: `Creating new initiative` }); }) }
+  const handleItemClick = (item: Item) => { if (!canEdit) return; checkAuth(() => { setEditingItem(item); setIsModalOpen(true); updateMyPresence({ activity: `Editing: ${item.title}` }); }) }
+  const handleMilestoneClick = (dayIndex: number, groupId: string) => { if (!canEdit) return; checkAuth(() => { const date = addDays(roadmapStart, dayIndex); setCurrentMilestoneData({ title: '', date: format(date, 'yyyy-MM-dd'), groupId, icon: 'diamond', color: 'text-slate-600', roadmapId }); setMilestoneModalOpen(true); updateMyPresence({ activity: `Adding milestone` }); }) }
+  const handleEditMilestone = (milestone: Milestone) => { if (!canEdit) return; checkAuth(() => { setCurrentMilestoneData(milestone); setMilestoneModalOpen(true); updateMyPresence({ activity: `Editing: ${milestone.title}` }); }) }
 
   const layout = useMemo(() => {
     const visualPositions: Record<string, number> = {}; const groupHeights: Record<string, number> = {}; const currentItemHeight = VIEW_ITEM_HEIGHTS[timeView];
@@ -527,15 +586,8 @@ const confirmImport = async () => {
         initial={{ opacity: 0 }} 
         animate={{ opacity: 1 }} 
         className="flex flex-col h-[100dvh] w-full bg-white dark:bg-[#191b19] font-sans overflow-hidden transition-colors"
-        
-        // --- CAPTURE MOUSE MOVEMENTS FOR CURSORS ---
-        onPointerMove={(e) => updateMyPresence({ cursor: { x: Math.round(e.clientX), y: Math.round(e.clientY) } })}
-        onPointerLeave={() => updateMyPresence({ cursor: null })}
     >
       
-      {/* --- RENDER EVERYONE ELSE'S CURSORS --- */}
-      <LiveCursors />
-
       {/* --- TOP NAVBAR --- */}
       <header className="flex flex-col md:flex-row md:items-center justify-between px-6 py-4 gap-4 border-b border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-[#191b19]/70 backdrop-blur-xl backdrop-saturate-150 z-[150] relative">
         <div className="flex flex-wrap items-center gap-4">
@@ -622,20 +674,11 @@ const confirmImport = async () => {
 
         <div className="flex items-center gap-3 relative z-10">
           
-          {/* --- NEW ACTIVE USERS AVATAR STACK --- */}
+          {/* --- NEW: ACTIVE USERS AVATAR HOVER STACK --- */}
           {others.length > 0 && (
             <div className="flex items-center -space-x-3 mr-2 pr-4 border-r border-slate-200 dark:border-slate-700">
-                {others.slice(0, 3).map(({ connectionId, info }: any) => (
-                    <div 
-                        key={connectionId} 
-                        className="w-8 h-8 rounded-full border-2 border-white dark:border-[#191b19] overflow-hidden shadow-sm z-10 bg-[#3f407e]" 
-                        title={info?.name}
-                    >
-                        {info?.avatar 
-                            ? <img src={info.avatar} className="w-full h-full object-cover" /> 
-                            : <div className="w-full h-full flex justify-center items-center text-white text-xs font-bold">{info?.name?.[0] || '?'}</div>
-                        }
-                    </div>
+                {others.slice(0, 3).map(({ connectionId, info, presence }: any) => (
+                    <ActiveUserAvatar key={connectionId} info={info} presence={presence} />
                 ))}
                 {others.length > 3 && (
                     <div className="w-8 h-8 rounded-full border-2 border-white dark:border-[#191b19] bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs font-bold flex items-center justify-center z-0">
@@ -661,7 +704,7 @@ const confirmImport = async () => {
 
           {userRole === 'OWNER' && (
               <button 
-                  onClick={() => checkAuth(() => setIsShareModalOpen(true))} 
+                  onClick={() => checkAuth(() => { setIsShareModalOpen(true); updateMyPresence({ activity: 'Managing Permissions' }); })} 
                   className="p-2.5 rounded-xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center gap-2 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors shadow-sm"
               >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
@@ -699,7 +742,28 @@ const confirmImport = async () => {
       </header>
 
       {/* --- MAIN CONTENT AREA --- */}
-      <div className="flex-1 overflow-hidden relative bg-slate-50/50 dark:bg-[#191b19]">
+      {/* THE FIX: Cursors are now tracked specifically inside this scrollable container */}
+      <div 
+        ref={containerRef}
+        className="flex-1 overflow-auto relative bg-slate-50/50 dark:bg-[#191b19] custom-scrollbar"
+        onPointerMove={(e) => {
+            const container = containerRef.current;
+            if (!container) return;
+            const rect = container.getBoundingClientRect();
+            
+            // Only update cursor if mouse is over the grid (not the navbar)
+            if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                // THE FIX: Adding scroll offset to calculate true canvas coordinates
+                const x = e.clientX - rect.left + container.scrollLeft;
+                const y = e.clientY - rect.top + container.scrollTop;
+                updateMyPresence({ cursor: { x, y } });
+            }
+        }}
+        onPointerLeave={() => updateMyPresence({ cursor: null })}
+      >
+        {/* Render relative cursors inside the scrollable container */}
+        <LiveCursors />
+
         <AnimatePresence mode="wait">
             {isLoading ? (
                 <motion.div 
@@ -736,10 +800,10 @@ const confirmImport = async () => {
                     <motion.div 
                         key="timeline-content"
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                        ref={containerRef} className="h-full w-full overflow-auto relative"
+                        className="min-w-max"
                     >
                         <div 
-                            className="grid min-w-max" 
+                            className="grid" 
                             style={{ 
                                 gridTemplateColumns: `${sidebarWidth}px repeat(${totalDays}, ${columnWidth}px)`, 
                                 gridTemplateRows: gridRowsCSS,
@@ -837,9 +901,9 @@ const confirmImport = async () => {
                                 <motion.div layout="position" transition={{ type: "spring", stiffness: 400, damping: 40 }} className="sticky left-0 z-50 flex items-center justify-center px-4 py-4 overflow-hidden" style={{ gridColumn: 1, gridRow: groups.length + headerRowsCount + 1, height: '80px' }}>
                                     {sidebarOpen && ( 
                                         <div className="flex w-full min-w-[200px] items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm backdrop-blur-sm"> 
-                                            <button onClick={() => checkAuth(() => { setEditingLaneId(null); setLaneManagerMode('add'); })} className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 bg-white dark:bg-[#3f407e] text-[#3f407e] dark:text-white rounded-lg shadow-sm hover:shadow-md transition-all font-bold text-xs border border-slate-200 dark:border-[#3f407e] active:scale-95"> <span className="text-lg leading-none">+</span> <span>Track</span> </button> 
+                                            <button onClick={() => checkAuth(() => { setEditingLaneId(null); setLaneManagerMode('add'); updateMyPresence({ activity: 'Creating track' }); })} className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 bg-white dark:bg-[#3f407e] text-[#3f407e] dark:text-white rounded-lg shadow-sm hover:shadow-md transition-all font-bold text-xs border border-slate-200 dark:border-[#3f407e] active:scale-95"> <span className="text-lg leading-none">+</span> <span>Track</span> </button> 
                                             <div className="w-[1px] h-6 bg-slate-300 dark:bg-slate-600" />
-                                            <button onClick={() => checkAuth(() => { setEditingLaneId(null); setLaneManagerMode('manage'); })} className="p-2.5 text-slate-500 dark:text-slate-400 hover:text-[#3f407e] dark:hover:text-white hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-all" title="Manage Structure"> <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg> </button> 
+                                            <button onClick={() => checkAuth(() => { setEditingLaneId(null); setLaneManagerMode('manage'); updateMyPresence({ activity: 'Configuring tracks' }); })} className="p-2.5 text-slate-500 dark:text-slate-400 hover:text-[#3f407e] dark:hover:text-white hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-all" title="Manage Structure"> <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg> </button> 
                                         </div> 
                                     )}
                                 </motion.div>
@@ -853,11 +917,11 @@ const confirmImport = async () => {
       </div>
       
       {/* --- MODALS --- */}
-      <ItemEditorModal isOpen={isModalOpen || milestoneModalOpen} onClose={() => { setIsModalOpen(false); setMilestoneModalOpen(false); setEditingItem(null); setCurrentMilestoneData(null); }} groups={groups} editObjective={editingItem} onSaveObjective={handleSaveItem} onDeleteObjective={handleDeleteItem} editMilestone={currentMilestoneData} onSaveMilestone={handleSaveMilestone} onDeleteMilestone={handleDeleteMilestone} />
-      <LaneManagerModal isOpen={laneManagerMode !== null} mode={laneManagerMode || 'manage'} onClose={() => { setLaneManagerMode(null); setEditingLaneId(null); }} groups={groups} onCreateLane={handleCreateLane} onUpdateLane={handleUpdateLane} onDeleteLane={handleDeleteLane} onReorderLanes={handleReorderLanes} onEditLane={handleEditLane} editGroupId={editingLaneId} items={items} milestones={milestones} />
-      <AuthBarrierModal isOpen={isAuthBarrierOpen} onClose={() => setIsAuthBarrierOpen(false)} />
-      <ConfirmModal isOpen={importConfirmOpen} onClose={() => setImportConfirmOpen(false)} onConfirm={confirmImport} title="Overwrite Roadmap?" message="Importing this file will replace all current data with the contents of the CSV. This action cannot be undone." confirmText="Yes, Import & Overwrite" isDangerous={true} />
-      <ShareModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} roadmapId={roadmapId} />
+      <ItemEditorModal isOpen={isModalOpen || milestoneModalOpen} onClose={closeAllModals} groups={groups} editObjective={editingItem} onSaveObjective={handleSaveItem} onDeleteObjective={handleDeleteItem} editMilestone={currentMilestoneData} onSaveMilestone={handleSaveMilestone} onDeleteMilestone={handleDeleteMilestone} />
+      <LaneManagerModal isOpen={laneManagerMode !== null} mode={laneManagerMode || 'manage'} onClose={closeAllModals} groups={groups} onCreateLane={handleCreateLane} onUpdateLane={handleUpdateLane} onDeleteLane={handleDeleteLane} onReorderLanes={handleReorderLanes} onEditLane={handleEditLane} editGroupId={editingLaneId} items={items} milestones={milestones} />
+      <AuthBarrierModal isOpen={isAuthBarrierOpen} onClose={closeAllModals} />
+      <ConfirmModal isOpen={importConfirmOpen} onClose={closeAllModals} onConfirm={confirmImport} title="Overwrite Roadmap?" message="Importing this file will replace all current data with the contents of the CSV. This action cannot be undone." confirmText="Yes, Import & Overwrite" isDangerous={true} />
+      <ShareModal isOpen={isShareModalOpen} onClose={closeAllModals} roadmapId={roadmapId} />
       
       <Toaster position="bottom-right" toastOptions={{ style: { background: '#333', color: '#fff', fontSize: '14px', borderRadius: '12px' } }} />
     </motion.div>
