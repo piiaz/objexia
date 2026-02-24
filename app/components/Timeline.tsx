@@ -60,7 +60,7 @@ function DroppableLane({ groupId, height, rowIndex, headerRows }: { groupId: str
   )
 }
 
-// --- UPGRADED: CANVAS-LOCKED CURSORS ---
+// --- UPGRADED: CURSORS BLUR BEHIND MODALS ---
 function LiveCursors() {
     const others = useOthers();
     
@@ -71,8 +71,8 @@ function LiveCursors() {
                 return (
                     <motion.div
                         key={connectionId}
-                        // Absolute positioning relative to the inner Canvas! Will naturally clip under the Navbar.
-                        className="absolute top-0 left-0 pointer-events-none z-[9999]"
+                        // THE FIX: z-[140] puts it above headers, but perfectly BELOW modals and backdrops!
+                        className="absolute top-0 left-0 pointer-events-none z-[140]"
                         animate={{ x: presence.cursor.x, y: presence.cursor.y }}
                         transition={{ type: "spring", damping: 40, mass: 0.5, stiffness: 500 }}
                     >
@@ -86,7 +86,6 @@ function LiveCursors() {
                         >
                             <span>{info?.name || 'Anonymous'}</span>
                             
-                            {/* Live Activity Status right on the cursor! */}
                             {presence?.activity && (
                                 <div className="mt-1 pt-1 border-t border-white/20 text-[10px] font-medium flex items-center gap-1.5 opacity-90">
                                     <span className="relative flex h-2 w-2">
@@ -104,22 +103,27 @@ function LiveCursors() {
     );
 }
 
-// --- UPGRADED: RICH USER PROFILE HOVER CARDS ---
-function ActiveUserAvatar({ info, presence }: { info: any, presence: any }) {
+// --- UPGRADED: RICH USER PROFILE HOVER CARDS WITH "CLICK TO TRACK" ---
+function ActiveUserAvatar({ info, presence, onJump }: { info: any, presence: any, onJump: () => void }) {
     const [isOpen, setIsOpen] = useState(false);
     return (
         <div 
             className="relative cursor-pointer shrink-0"
             onMouseEnter={() => setIsOpen(true)}
             onMouseLeave={() => setIsOpen(false)}
-            onClick={() => setIsOpen(!isOpen)}
+            onClick={() => {
+                setIsOpen(!isOpen);
+                onJump(); // THE FIX: Click avatar to jump to their mouse!
+            }}
+            title={`Jump to ${info?.name}`}
         >
             <div 
                 className="w-9 h-9 rounded-full border-[3px] border-white dark:border-[#191b19] overflow-hidden shadow-sm z-10 transition-transform hover:scale-110" 
                 style={{ backgroundColor: info?.color || '#3f407e' }}
             >
+                {/* THE FIX: referrerPolicy ensures Google photos don't 403 error */}
                 {info?.avatar 
-                    ? <img src={info.avatar} className="w-full h-full object-cover" /> 
+                    ? <img src={info.avatar} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> 
                     : <div className="w-full h-full flex justify-center items-center text-white text-xs font-bold">{info?.name?.[0] || '?'}</div>
                 }
             </div>
@@ -135,7 +139,7 @@ function ActiveUserAvatar({ info, presence }: { info: any, presence: any }) {
                     >
                         <div className="flex items-center gap-3 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
                             <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 border-2 border-slate-100 dark:border-slate-800" style={{ backgroundColor: info?.color || '#3f407e' }}>
-                                {info?.avatar ? <img src={info.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full flex justify-center items-center text-white font-bold text-lg">{info?.name?.[0] || '?'}</div>}
+                                {info?.avatar ? <img src={info.avatar} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : <div className="w-full h-full flex justify-center items-center text-white font-bold text-lg">{info?.name?.[0] || '?'}</div>}
                             </div>
                             <div className="overflow-hidden">
                                 <div className="text-sm font-extrabold text-slate-900 dark:text-white truncate tracking-tight">{info?.name || 'Anonymous'}</div>
@@ -158,6 +162,9 @@ function ActiveUserAvatar({ info, presence }: { info: any, presence: any }) {
                                     Viewing board
                                 </div>
                             )}
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-[9px] text-slate-400 font-bold uppercase tracking-widest text-center opacity-70">
+                            Click to jump to cursor
                         </div>
                     </motion.div>
                 )}
@@ -214,7 +221,7 @@ export default function Timeline({ roadmapId }: Props) {
   const roadmapEnd = useMemo(() => parseISO(dateRange.end), [dateRange.end]);
   
   const containerRef = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLDivElement>(null) // NEW: Reference specifically for the grid canvas
+  const canvasRef = useRef<HTMLDivElement>(null) 
   const todayRef = useRef<HTMLDivElement>(null) 
   
   const [containerWidth, setContainerWidth] = useState(0)
@@ -273,6 +280,16 @@ export default function Timeline({ roadmapId }: Props) {
           const scrollLeft = line.offsetLeft - (container.clientWidth / 2) + (line.clientWidth / 2);
           container.scrollTo({ left: scrollLeft, behavior: 'smooth' });
       }
+  };
+
+  // --- THE FIX: JUMP TO OTHER USER'S CURSOR ---
+  const handleJumpToUser = (x: number, name: string) => {
+      if (!containerRef.current) return;
+      const container = containerRef.current;
+      // Subtract half the screen width so the cursor is perfectly centered!
+      const scrollLeft = x - (container.clientWidth / 2);
+      container.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+      toast(`Located ${name}`, { icon: '📍', id: 'jump-toast' });
   };
 
   const columnWidth = useMemo(() => { 
@@ -700,7 +717,18 @@ export default function Timeline({ roadmapId }: Props) {
           {others.length > 0 && (
             <div className="flex items-center -space-x-3 mr-2 pr-4 border-r border-slate-200 dark:border-slate-700">
                 {others.slice(0, 3).map(({ connectionId, info, presence }: any) => (
-                    <ActiveUserAvatar key={connectionId} info={info} presence={presence} />
+                    <ActiveUserAvatar 
+                        key={connectionId} 
+                        info={info} 
+                        presence={presence} 
+                        onJump={() => {
+                            if (presence?.cursor) {
+                                handleJumpToUser(presence.cursor.x, info?.name || 'User');
+                            } else {
+                                toast.error(`${info?.name || 'User'} is currently inactive on the board`);
+                            }
+                        }}
+                    />
                 ))}
                 {others.length > 3 && (
                     <div className="w-8 h-8 rounded-full border-2 border-white dark:border-[#191b19] bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs font-bold flex items-center justify-center z-0">
@@ -735,7 +763,7 @@ export default function Timeline({ roadmapId }: Props) {
           )}
 
           <ThemeToggle />
-          {user && (<Link href={`/profile?from=/roadmap/${roadmapId}`}><div className="w-9 h-9 rounded-full bg-[#b3bbea] dark:bg-[#3f407e] border-2 border-white dark:border-slate-700 shadow-sm overflow-hidden hover:scale-110 transition-transform">{user.avatarUrl ? <img src={user.avatarUrl} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-xs font-bold text-[#3f407e] dark:text-white">{user.firstName[0]}</div>}</div></Link>)}
+          {user && (<Link href={`/profile?from=/roadmap/${roadmapId}`}><div className="w-9 h-9 rounded-full bg-[#b3bbea] dark:bg-[#3f407e] border-2 border-white dark:border-slate-700 shadow-sm overflow-hidden hover:scale-110 transition-transform">{user.avatarUrl ? <img src={user.avatarUrl} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-xs font-bold text-[#3f407e] dark:text-white">{user.firstName[0]}</div>}</div></Link>)}
           
           {canEdit && (
               <button 
@@ -773,10 +801,7 @@ export default function Timeline({ roadmapId }: Props) {
             
             const rect = canvas.getBoundingClientRect();
             
-            // Only track if mouse is within the scrolling grid area (Below Navbar)
             if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-                // THE FIX: True absolute coordinates relative to the inner scrolling canvas
-                // We use Math.round to ensure Liveblocks never receives NaN
                 const x = Math.round(e.clientX - rect.left);
                 const y = Math.round(e.clientY - rect.top);
                 updateMyPresence({ cursor: { x, y } });

@@ -35,20 +35,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Forbidden - Access denied" }, { status: 403 });
     }
 
-    // --- THE BULLETPROOF FIX ---
-    // A base64 image string is massive (>100,000 chars). 
-    // A standard Google OAuth URL is small (~100 chars).
-    // If it's over 500 characters, it's a base64 string that will crash Liveblocks.
+    // Strip massive Base64 strings to prevent crashing Liveblocks
     let safeAvatarUrl = user.avatarUrl;
-    if (!safeAvatarUrl || safeAvatarUrl.length > 500) {
-        safeAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.firstName)}&background=3f407e&color=fff`;
+    if (safeAvatarUrl && safeAvatarUrl.length > 500) {
+        safeAvatarUrl = null; 
     }
 
     const session = liveblocks.prepareSession(user.id, {
       userInfo: {
         name: user.lastName ? `${user.firstName} ${user.lastName}` : user.firstName,
         email: user.email || 'No email provided', 
-        avatar: safeAvatarUrl,
+        // THE FIX: Add "|| undefined" here to satisfy TypeScript!
+        avatar: safeAvatarUrl || undefined,
         color: ["#FF5733", "#33FF57", "#3357FF", "#F033FF", "#FF33A8"][Math.floor(Math.random() * 5)]
       }
     });
