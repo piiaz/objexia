@@ -35,12 +35,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Forbidden - Access denied" }, { status: 403 });
     }
 
-    // --- THE FIX: Handle massive Base64 Image Strings ---
-    // Prevent the 278KB payload from crashing the 2KB Liveblocks limit
+    // --- THE BULLETPROOF FIX ---
+    // A base64 image string is massive (>100,000 chars). 
+    // A standard Google OAuth URL is small (~100 chars).
+    // If it's over 500 characters, it's a base64 string that will crash Liveblocks.
     let safeAvatarUrl = user.avatarUrl;
-    if (!safeAvatarUrl || safeAvatarUrl.startsWith('data:image')) {
-        // Fallback to initials if they uploaded a massive custom Base64 photo
-        // (Google OAuth URLs will safely bypass this and display normally)
+    if (!safeAvatarUrl || safeAvatarUrl.length > 500) {
         safeAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.firstName)}&background=3f407e&color=fff`;
     }
 
