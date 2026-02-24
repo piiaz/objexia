@@ -60,7 +60,7 @@ function DroppableLane({ groupId, height, rowIndex, headerRows }: { groupId: str
   )
 }
 
-// --- NEW COMPONENT: RELATIVE LIVE CURSORS WITH ACTIVITY ---
+// --- UPGRADED: CANVAS-LOCKED CURSORS ---
 function LiveCursors() {
     const others = useOthers();
     
@@ -71,22 +71,30 @@ function LiveCursors() {
                 return (
                     <motion.div
                         key={connectionId}
-                        // absolute top-0 left-0 makes it position relative to the scrollable grid container!
+                        // Absolute positioning relative to the inner Canvas! Will naturally clip under the Navbar.
                         className="absolute top-0 left-0 pointer-events-none z-[9999]"
                         animate={{ x: presence.cursor.x, y: presence.cursor.y }}
-                        transition={{ type: "spring", damping: 30, mass: 0.5, stiffness: 400 }}
+                        transition={{ type: "spring", damping: 40, mass: 0.5, stiffness: 500 }}
                     >
-                        <svg width="24" height="36" viewBox="0 0 24 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M5.65376 12.3673H5.46026L5.31717 12.4976L0.500002 16.8829L0.500002 1.19841L11.7841 12.3673H5.65376Z" fill={info?.color || "#3f407e"}/>
+                        <svg width="24" height="36" viewBox="0 0 24 36" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-md">
+                            <path d="M5.65376 12.3673H5.46026L5.31717 12.4976L0.500002 16.8829L0.500002 1.19841L11.7841 12.3673H5.65376Z" fill={info?.color || "#3f407e"} stroke="white" strokeWidth="1.5"/>
                         </svg>
+                        
                         <div 
-                            className="px-2 py-1 text-xs font-bold rounded-md shadow-md ml-4 mt-2 flex flex-col whitespace-nowrap" 
+                            className="px-2.5 py-1.5 text-xs font-bold rounded-xl shadow-lg ml-4 mt-1 flex flex-col whitespace-nowrap" 
                             style={{ backgroundColor: info?.color || '#3f407e', color: '#fff' }}
                         >
                             <span>{info?.name || 'Anonymous'}</span>
-                            {/* Display what they are currently editing if applicable */}
+                            
+                            {/* UPGRADED: Live Activity Status right on the cursor! */}
                             {presence?.activity && (
-                                <span className="text-[9px] font-medium opacity-80 mt-0.5">{presence.activity}</span>
+                                <div className="mt-1 pt-1 border-t border-white/20 text-[10px] font-medium flex items-center gap-1.5 opacity-90">
+                                    <span className="relative flex h-2 w-2">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                                    </span>
+                                    {presence.activity}
+                                </div>
                             )}
                         </div>
                     </motion.div>
@@ -96,13 +104,18 @@ function LiveCursors() {
     );
 }
 
-// --- NEW COMPONENT: RICH USER PROFILE HOVER CARDS ---
+// --- UPGRADED: RICH USER PROFILE HOVER CARDS ---
 function ActiveUserAvatar({ info, presence }: { info: any, presence: any }) {
+    const [isOpen, setIsOpen] = useState(false);
     return (
-        <div className="relative group/avatar cursor-pointer shrink-0">
-            {/* Avatar Ring */}
+        <div 
+            className="relative cursor-pointer shrink-0"
+            onMouseEnter={() => setIsOpen(true)}
+            onMouseLeave={() => setIsOpen(false)}
+            onClick={() => setIsOpen(!isOpen)}
+        >
             <div 
-                className="w-8 h-8 rounded-full border-2 border-white dark:border-[#191b19] overflow-hidden shadow-sm z-10 transition-transform group-hover/avatar:scale-110" 
+                className="w-9 h-9 rounded-full border-[3px] border-white dark:border-[#191b19] overflow-hidden shadow-sm z-10 transition-transform hover:scale-110" 
                 style={{ backgroundColor: info?.color || '#3f407e' }}
             >
                 {info?.avatar 
@@ -111,35 +124,44 @@ function ActiveUserAvatar({ info, presence }: { info: any, presence: any }) {
                 }
             </div>
 
-            {/* Dropdown Profile Card */}
-            <div className="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-[#1e2126] border border-slate-100 dark:border-slate-800 rounded-xl shadow-xl opacity-0 invisible group-hover/avatar:opacity-100 group-hover/avatar:visible transition-all duration-200 z-[200] p-3 transform origin-top-right scale-95 group-hover/avatar:scale-100">
-                <div className="flex items-center gap-3 mb-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-                    <div className="w-10 h-10 rounded-full overflow-hidden shrink-0" style={{ backgroundColor: info?.color || '#3f407e' }}>
-                        {info?.avatar ? <img src={info.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full flex justify-center items-center text-white font-bold">{info?.name?.[0] || '?'}</div>}
-                    </div>
-                    <div className="overflow-hidden">
-                        <div className="text-sm font-bold text-slate-900 dark:text-white truncate">{info?.name || 'Anonymous'}</div>
-                        <div className="text-[10px] text-slate-500 truncate">{info?.email || 'Unknown email'}</div>
-                    </div>
-                </div>
-                <div>
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Current Status</div>
-                    {presence?.activity ? (
-                        <div className="text-xs text-[#3f407e] dark:text-[#b3bbea] font-medium flex items-center gap-2 bg-[#3f407e]/5 dark:bg-[#b3bbea]/10 p-2 rounded-lg leading-tight">
-                            <span className="relative flex h-2 w-2 shrink-0">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#3f407e] dark:bg-[#b3bbea] opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#3f407e] dark:bg-[#b3bbea]"></span>
-                            </span>
-                            <span className="truncate">{presence.activity}</span>
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute top-full right-0 mt-3 w-64 bg-white dark:bg-[#1e2126] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl z-[200] p-4 origin-top-right"
+                    >
+                        <div className="flex items-center gap-3 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                            <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 border-2 border-slate-100 dark:border-slate-800" style={{ backgroundColor: info?.color || '#3f407e' }}>
+                                {info?.avatar ? <img src={info.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full flex justify-center items-center text-white font-bold text-lg">{info?.name?.[0] || '?'}</div>}
+                            </div>
+                            <div className="overflow-hidden">
+                                <div className="text-sm font-extrabold text-slate-900 dark:text-white truncate tracking-tight">{info?.name || 'Anonymous'}</div>
+                                <div className="text-[11px] font-medium text-slate-500 truncate mt-0.5">{info?.email || 'Guest User'}</div>
+                            </div>
                         </div>
-                    ) : (
-                        <div className="text-xs text-slate-500 italic flex items-center gap-2 px-1">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                            Viewing roadmap
+                        <div>
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Current Status</div>
+                            {presence?.activity ? (
+                                <div className="text-xs text-[#3f407e] dark:text-[#b3bbea] font-bold flex items-center gap-2 bg-[#3f407e]/10 dark:bg-[#b3bbea]/10 p-2.5 rounded-xl leading-tight border border-[#3f407e]/20 dark:border-[#b3bbea]/20">
+                                    <span className="relative flex h-2 w-2 shrink-0">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#3f407e] dark:bg-[#b3bbea] opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[#3f407e] dark:bg-[#b3bbea]"></span>
+                                    </span>
+                                    <span className="truncate">{presence.activity}</span>
+                                </div>
+                            ) : (
+                                <div className="text-xs text-slate-500 font-medium flex items-center gap-2 px-1">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                    Viewing board
+                                </div>
+                            )}
                         </div>
-                    )}
-                </div>
-            </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
@@ -185,10 +207,14 @@ export default function Timeline({ roadmapId }: Props) {
   
   const [shakeButton, setShakeButton] = useState(false);
 
+  // Global state to detect if ANY modal is open (so we don't delete their cursor when they type!)
+  const isAnyModalOpen = isModalOpen || milestoneModalOpen || laneManagerMode !== null || isShareModalOpen || importConfirmOpen;
+
   const roadmapStart = useMemo(() => parseISO(dateRange.start), [dateRange.start]);
   const roadmapEnd = useMemo(() => parseISO(dateRange.end), [dateRange.end]);
   
   const containerRef = useRef<HTMLDivElement>(null)
+  const canvasRef = useRef<HTMLDivElement>(null) // NEW: Reference specifically for the grid canvas
   const todayRef = useRef<HTMLDivElement>(null) 
   
   const [containerWidth, setContainerWidth] = useState(0)
@@ -277,9 +303,7 @@ export default function Timeline({ roadmapId }: Props) {
     if (!silent) setIsLoading(true);
     
     try { 
-      const res = await fetch(`/api/roadmaps/${roadmapId}?userId=${user.id}&t=${Date.now()}`, {
-          cache: 'no-store'
-      }); 
+      const res = await fetch(`/api/roadmaps/${roadmapId}?userId=${user.id}&t=${Date.now()}`, { cache: 'no-store' }); 
       
       if (res.ok) { 
         const data = await res.json(); 
@@ -329,7 +353,6 @@ export default function Timeline({ roadmapId }: Props) {
   const toggleSidebar = () => { const newState = !sidebarOpen; setSidebarOpen(newState); localStorage.setItem('objexia_sidebar_state', String(newState)); }
   const checkAuth = (action: () => void) => { if (user) { action(); } else { setIsAuthBarrierOpen(true); } }
 
-  // --- UI INTERACTION ACTIVITY TRIGGERS ---
   const closeAllModals = () => {
       setIsModalOpen(false);
       setMilestoneModalOpen(false);
@@ -337,7 +360,7 @@ export default function Timeline({ roadmapId }: Props) {
       setIsShareModalOpen(false);
       setEditingItem(null);
       setCurrentMilestoneData(null);
-      updateMyPresence({ activity: null }); // Clear activity status
+      updateMyPresence({ activity: null }); 
   }
 
   const handleDateChange = (type: 'start' | 'end', date: string) => {
@@ -402,7 +425,7 @@ export default function Timeline({ roadmapId }: Props) {
     const optimisticItem = { ...itemData, id: itemId, trackIndex };
     if (isUpdate) { setItems(prev => prev.map(i => i.id === itemId ? optimisticItem : i)); } 
     else { setItems(prev => [...prev, optimisticItem]); }
-    closeAllModals(); // Close and reset presence
+    closeAllModals(); 
     try { 
       const method = isUpdate ? 'PATCH' : 'POST'; 
       const url = isUpdate ? `/api/items/${itemId}` : '/api/items'; 
@@ -531,7 +554,7 @@ export default function Timeline({ roadmapId }: Props) {
       } 
   }
   
-  // MODAL HANDLERS - Now emitting live activity status!
+  // --- UPGRADED: MODAL HANDLERS EMITTING LIVE ACTIVITY ---
   const handleEditLane = (group: Group) => { if (!canEdit) return; checkAuth(() => { setEditingLaneId(group.id); setLaneManagerMode('manage'); updateMyPresence({ activity: `Configuring Tracks` }); }) }
   const openNewItemModal = () => { if (!canEdit) return; checkAuth(() => { setEditingItem(null); setIsModalOpen(true); updateMyPresence({ activity: `Creating new initiative` }); }) }
   const handleItemClick = (item: Item) => { if (!canEdit) return; checkAuth(() => { setEditingItem(item); setIsModalOpen(true); updateMyPresence({ activity: `Editing: ${item.title}` }); }) }
@@ -620,7 +643,6 @@ export default function Timeline({ roadmapId }: Props) {
             )}
           </div>
           
-          {/* Controls - Disabled visually if Viewer */}
           <div className={`flex items-center gap-2 relative z-10 ${!canEdit ? 'pointer-events-none opacity-60 grayscale-[30%]' : ''}`}>
               <DateRangeSelector 
                 startDate={dateRange.start} 
@@ -674,7 +696,7 @@ export default function Timeline({ roadmapId }: Props) {
 
         <div className="flex items-center gap-3 relative z-10">
           
-          {/* --- NEW: ACTIVE USERS AVATAR HOVER STACK --- */}
+          {/* --- ACTIVE USERS AVATAR HOVER STACK --- */}
           {others.length > 0 && (
             <div className="flex items-center -space-x-3 mr-2 pr-4 border-r border-slate-200 dark:border-slate-700">
                 {others.slice(0, 3).map(({ connectionId, info, presence }: any) => (
@@ -742,28 +764,10 @@ export default function Timeline({ roadmapId }: Props) {
       </header>
 
       {/* --- MAIN CONTENT AREA --- */}
-      {/* THE FIX: Cursors are now tracked specifically inside this scrollable container */}
       <div 
         ref={containerRef}
         className="flex-1 overflow-auto relative bg-slate-50/50 dark:bg-[#191b19] custom-scrollbar"
-        onPointerMove={(e) => {
-            const container = containerRef.current;
-            if (!container) return;
-            const rect = container.getBoundingClientRect();
-            
-            // Only update cursor if mouse is over the grid (not the navbar)
-            if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-                // THE FIX: Adding scroll offset to calculate true canvas coordinates
-                const x = e.clientX - rect.left + container.scrollLeft;
-                const y = e.clientY - rect.top + container.scrollTop;
-                updateMyPresence({ cursor: { x, y } });
-            }
-        }}
-        onPointerLeave={() => updateMyPresence({ cursor: null })}
       >
-        {/* Render relative cursors inside the scrollable container */}
-        <LiveCursors />
-
         <AnimatePresence mode="wait">
             {isLoading ? (
                 <motion.div 
@@ -797,11 +801,32 @@ export default function Timeline({ roadmapId }: Props) {
                 </motion.div>
             ) : (
                 <DndContext onDragEnd={handleDragEnd} sensors={sensors} collisionDetection={closestCenter}>
+                    {/* THE FIX: Inner Canvas Container. Pointer events live HERE so they track math on the grid itself! */}
                     <motion.div 
                         key="timeline-content"
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                        className="min-w-max"
+                        ref={canvasRef}
+                        className="min-w-max relative"
+                        onPointerMove={(e) => {
+                            const canvas = canvasRef.current;
+                            if (!canvas) return;
+                            const rect = canvas.getBoundingClientRect();
+                            
+                            // Perfect math: Calculate mouse X/Y entirely within the grid canvas boundary
+                            const x = e.clientX - rect.left;
+                            const y = e.clientY - rect.top;
+                            updateMyPresence({ cursor: { x, y } });
+                        }}
+                        onPointerLeave={() => {
+                            // Only hide cursor if they completely left the board (and aren't typing in a modal)
+                            if (!isAnyModalOpen) {
+                                updateMyPresence({ cursor: null });
+                            }
+                        }}
                     >
+                        {/* LiveCursors is now safely trapped inside the Canvas overflow bounds */}
+                        <LiveCursors />
+
                         <div 
                             className="grid" 
                             style={{ 
