@@ -86,7 +86,7 @@ function LiveCursors() {
                         >
                             <span>{info?.name || 'Anonymous'}</span>
                             
-                            {/* UPGRADED: Live Activity Status right on the cursor! */}
+                            {/* Live Activity Status right on the cursor! */}
                             {presence?.activity && (
                                 <div className="mt-1 pt-1 border-t border-white/20 text-[10px] font-medium flex items-center gap-1.5 opacity-90">
                                     <span className="relative flex h-2 w-2">
@@ -554,7 +554,7 @@ export default function Timeline({ roadmapId }: Props) {
       } 
   }
   
-  // --- UPGRADED: MODAL HANDLERS EMITTING LIVE ACTIVITY ---
+  // MODAL HANDLERS EMITTING LIVE ACTIVITY
   const handleEditLane = (group: Group) => { if (!canEdit) return; checkAuth(() => { setEditingLaneId(group.id); setLaneManagerMode('manage'); updateMyPresence({ activity: `Configuring Tracks` }); }) }
   const openNewItemModal = () => { if (!canEdit) return; checkAuth(() => { setEditingItem(null); setIsModalOpen(true); updateMyPresence({ activity: `Creating new initiative` }); }) }
   const handleItemClick = (item: Item) => { if (!canEdit) return; checkAuth(() => { setEditingItem(item); setIsModalOpen(true); updateMyPresence({ activity: `Editing: ${item.title}` }); }) }
@@ -768,22 +768,19 @@ export default function Timeline({ roadmapId }: Props) {
         ref={containerRef}
         className="flex-1 overflow-auto relative bg-slate-50/50 dark:bg-[#191b19] custom-scrollbar"
         onPointerMove={(e) => {
-            const container = containerRef.current;
             const canvas = canvasRef.current;
-            if (!container || !canvas) return;
+            if (!canvas) return;
             
-            const rect = container.getBoundingClientRect();
+            const rect = canvas.getBoundingClientRect();
             
             // Only track if mouse is within the scrolling grid area (Below Navbar)
             if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-                // THE FIX: Calculate relative to the specific scrollable inner canvas, NOT the screen!
-                const canvasRect = canvas.getBoundingClientRect();
-                const x = e.clientX - canvasRect.left;
-                const y = e.clientY - canvasRect.top;
-                
+                // THE FIX: True absolute coordinates relative to the inner scrolling canvas
+                // We use Math.round to ensure Liveblocks never receives NaN
+                const x = Math.round(e.clientX - rect.left);
+                const y = Math.round(e.clientY - rect.top);
                 updateMyPresence({ cursor: { x, y } });
             } else {
-                // Hide cursor if they move over the top navbar
                 if (!isAnyModalOpen) updateMyPresence({ cursor: null });
             }
         }}
@@ -824,14 +821,12 @@ export default function Timeline({ roadmapId }: Props) {
                 </motion.div>
             ) : (
                 <DndContext onDragEnd={handleDragEnd} sensors={sensors} collisionDetection={closestCenter}>
-                    {/* THE FIX: Inner Canvas Container. Pointer events map relative to THIS element! */}
                     <motion.div 
                         key="timeline-content"
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                         ref={canvasRef}
                         className="min-w-max relative"
                     >
-                        {/* LiveCursors is now safely trapped inside the Canvas bounds */}
                         <LiveCursors />
 
                         <div 

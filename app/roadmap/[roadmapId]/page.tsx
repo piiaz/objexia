@@ -32,20 +32,10 @@ export default function RoadmapPage() {
 
   return (
     <LiveblocksProvider 
-      // THE FIX 1: Pass the 'room' argument directly from Liveblocks
-      authEndpoint={async (room) => {
-        const res = await fetch("/api/liveblocks-auth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ room, userId: user.id }), 
-        });
-        
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Authentication failed");
-        return data;
-      }}
+      // THE FIX: Use native string endpoint passing data via URL to avoid React closure bugs
+      authEndpoint={`/api/liveblocks-auth?userId=${user.id}&room=${safeRoadmapId}`}
     >
-      {/* THE FIX 2: Explicitly declare 'activity: null' so Liveblocks doesn't crash when we update it! */}
+      {/* THE FIX: Explicitly declare 'activity: null' so Liveblocks doesn't crash! */}
       <RoomProvider id={safeRoadmapId} initialPresence={{ cursor: null, activity: null }}>
         <ClientSideSuspense fallback={
           <div className="flex items-center justify-center h-screen bg-slate-50 dark:bg-[#191b19]">

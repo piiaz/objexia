@@ -8,45 +8,47 @@ const liveblocks = new Liveblocks({
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { room, userId } = body;
+    // Safely extract parameters from the URL
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId');
+    const room = searchParams.get('room');
 
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!userId || !room) {
+        return NextResponse.json({ error: "Missing userId or room" }, { status: 400 });
+    }
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-    if (room) {
-      const roadmap = await prisma.roadmap.findUnique({
-        where: { id: room },
-        include: { collaborators: true }
-      });
+    // Validate they have access to this specific roadmap
+    const roadmap = await prisma.roadmap.findUnique({
+      where: { id: room },
+      include: { collaborators: true }
+    });
 
-      if (!roadmap) return NextResponse.json({ error: "Roadmap not found" }, { status: 404 });
+    if (!roadmap) return NextResponse.json({ error: "Roadmap not found" }, { status: 404 });
 
-      const isOwner = roadmap.userId === user.id;
-      const isCollaborator = roadmap.collaborators.some(
-        c => c.userId === user.id && c.status === 'ACCEPTED'
-      );
+    const isOwner = roadmap.userId === user.id;
+    // Case-insensitive check just to be absolutely safe
+    const isCollaborator = roadmap.collaborators.some(
+      c => c.userId === user.id && c.status.toUpperCase() === 'ACCEPTED'
+    );
 
-      if (!isOwner && !isCollaborator) {
-        return NextResponse.json({ error: "Forbidden - Access denied" }, { status: 403 });
-      }
+    if (!isOwner && !isCollaborator) {
+      return NextResponse.json({ error: "Forbidden - Access denied" }, { status: 403 });
     }
 
-    // THE FIX: Added user.email and lastName to the Liveblocks session payload
+    // Prepare session with full Profile Data for hover cards
     const session = liveblocks.prepareSession(user.id, {
       userInfo: {
         name: user.lastName ? `${user.firstName} ${user.lastName}` : user.firstName,
-        email: user.email, 
+        email: user.email || 'No email provided', 
         avatar: user.avatarUrl || `https://ui-avatars.com/api/?name=${user.firstName}&background=3f407e&color=fff`,
         color: ["#FF5733", "#33FF57", "#3357FF", "#F033FF", "#FF33A8"][Math.floor(Math.random() * 5)]
       }
     });
 
-    if (room) {
-      session.allow(room, session.FULL_ACCESS);
-    }
+    session.allow(room, session.FULL_ACCESS);
 
     const { status, body: authBody } = await session.authorize();
     
