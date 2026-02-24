@@ -220,12 +220,16 @@ export default function Timeline({ roadmapId }: Props) {
   )
 
   // --- REFACTORED DATA LOADING (With Silent Refetch for Real-time) ---
-  const loadRoadmapData = useCallback(async (silent = false) => {
+const loadRoadmapData = useCallback(async (silent = false) => {
     if (!roadmapId || !user?.id) return;
     if (!silent) setIsLoading(true);
     
     try { 
-      const res = await fetch(`/api/roadmaps/${roadmapId}?userId=${user.id}`); 
+      // THE FIX: Added a timestamp (t) and no-store cache to force fresh DB data!
+      const res = await fetch(`/api/roadmaps/${roadmapId}?userId=${user.id}&t=${Date.now()}`, {
+          cache: 'no-store'
+      }); 
+      
       if (res.ok) { 
         const data = await res.json(); 
         setRoadmapTitle(data.title); 
@@ -237,7 +241,6 @@ export default function Timeline({ roadmapId }: Props) {
         if (data.showWeekends !== undefined) setShowWeekends(data.showWeekends);
         
         setUserRole(data.currentUserRole); 
-
       } else if (res.status === 401 || res.status === 403) {
         toast.error("You don't have permission to view this board.");
         router.push('/dashboard');
@@ -445,12 +448,28 @@ useEventListener(({ event }) => {
   const handleExport = () => { checkAuth(() => { const csv = generateCsvContent(groups, items, milestones); const blob = new Blob([csv], {type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='roadmap.csv'; a.click(); }) }
   const handleImportClick = () => { if (!canEdit) return; checkAuth(() => fileInputRef.current?.click()) }
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => { const file=e.target.files?.[0]; if(!file)return; const r=new FileReader(); r.onload=(ev)=>{ const t=ev.target?.result; if(typeof t==='string'){ try { const p=parseCsvContent(t); if(p.groups.length>0){ setPendingImportData(p); setImportConfirmOpen(true); } else { toast.error("No valid data found in CSV"); } } catch(e) { toast.error("Invalid CSV format"); } } }; r.readAsText(file); e.target.value=''; }
-  const confirmImport = () => { 
+const confirmImport = async () => { 
       if(pendingImportData){ 
-          setGroups(pendingImportData.groups); setItems(pendingImportData.items); setMilestones(pendingImportData.milestones); 
-          setImportConfirmOpen(false); setPendingImportData(null); 
-          toast.success("Roadmap imported successfully"); 
-          broadcast({ type: 'REFETCH' }); // <--- BROADCAST
+          try {
+              // THE FIX: Actually send the data to the server!
+              const res = await fetch(`/api/roadmaps/${roadmapId}/import`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(pendingImportData)
+              });
+
+              if (!res.ok) throw new Error("Failed to save imported data");
+
+              setGroups(pendingImportData.groups); 
+              setItems(pendingImportData.items); 
+              setMilestones(pendingImportData.milestones); 
+              setImportConfirmOpen(false); 
+              setPendingImportData(null); 
+              toast.success("Roadmap imported successfully"); 
+              broadcast({ type: 'REFETCH' });
+          } catch(e) {
+              toast.error("Failed to import CSV to database");
+          }
       } 
   }
   

@@ -34,17 +34,17 @@ export default function RoadmapPage() {
   const safeRoadmapId = roadmapId as string;
 
   return (
-    <LiveblocksProvider 
-      authEndpoint={async (room) => {
+<LiveblocksProvider 
+      authEndpoint={async () => {
+        // We removed the 'room' argument and explicitly use 'safeRoadmapId'
         const res = await fetch("/api/liveblocks-auth", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ room, userId: user.id }),
+          body: JSON.stringify({ room: safeRoadmapId, userId: user.id }), 
         });
         
         const data = await res.json();
         
-        // If the server returned an error (like 403 Forbidden), throw it cleanly
         if (!res.ok) {
           throw new Error(data.error || "Authentication failed");
         }
