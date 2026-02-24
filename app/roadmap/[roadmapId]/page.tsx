@@ -41,7 +41,15 @@ export default function RoadmapPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ room, userId: user.id }),
         });
-        return await res.json();
+        
+        const data = await res.json();
+        
+        // If the server returned an error (like 403 Forbidden), throw it cleanly
+        if (!res.ok) {
+          throw new Error(data.error || "Authentication failed");
+        }
+        
+        return data;
       }}
     >
       <RoomProvider id={safeRoadmapId} initialPresence={{ cursor: null }}>

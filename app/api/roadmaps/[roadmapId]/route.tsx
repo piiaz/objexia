@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 
-// 1. GET Single Roadmap
+// 1. GET
 export async function GET(
   req: Request, 
   { params }: { params: Promise<{ roadmapId: string }> }
@@ -10,8 +10,6 @@ export async function GET(
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get('userId');
 
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
   try {
     const roadmap = await prisma.roadmap.findUnique({
       where: { id: roadmapId },
@@ -19,7 +17,7 @@ export async function GET(
         lanes: { orderBy: { order: 'asc' } },
         items: true,
         milestones: true,
-        collaborators: true, 
+        collaborators: true, // Need this to verify the user's role!
       }
     });
 
@@ -27,39 +25,33 @@ export async function GET(
       return NextResponse.json({ error: 'Roadmap not found' }, { status: 404 });
     }
 
-    // --- ACCESS CONTROL CHECK ---
+    // --- ACCESS CONTROL & ROLE CHECK ---
     let role = 'NONE';
     if (roadmap.userId === userId) {
       role = 'OWNER';
-    } else {
+    } else if (userId) {
       const access = roadmap.collaborators.find(c => c.userId === userId);
-      if (access) {
-          // If they haven't accepted the invite yet on their dashboard, block them!
-          if (access.status === 'PENDING') {
-              return NextResponse.json({ error: 'Invitation pending' }, { status: 403 });
-          }
-          role = access.role;
+      if (access && access.status === 'ACCEPTED') {
+        role = access.role;
       }
     }
 
+    // Block if they shouldn't be here
     if (role === 'NONE') {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Send the roadmap data PLUS the user's role so the frontend unlocks the buttons
+    // Return the roadmap data PLUS the user's specific role
     return NextResponse.json({ ...roadmap, currentUserRole: role });
+
   } catch (error) {
     return NextResponse.json({ error: 'Failed to load roadmap' }, { status: 500 });
   }
 }
 
-// 2. PATCH Roadmap Details
-export async function PATCH(
-  req: Request,
-  { params }: { params: Promise<{ roadmapId: string }> }
-) {
+// 2. PATCH (Keep your existing PATCH code here)
+export async function PATCH(req: Request, { params }: { params: Promise<{ roadmapId: string }> }) {
   const { roadmapId } = await params;
-  
   try {
     const body = await req.json();
     const updateData: any = { lastEdited: new Date() };
@@ -83,13 +75,9 @@ export async function PATCH(
   }
 }
 
-// 3. DELETE Roadmap
-export async function DELETE(
-  req: Request,
-  { params }: { params: Promise<{ roadmapId: string }> }
-) {
+// 3. DELETE (Keep your existing DELETE code here)
+export async function DELETE(req: Request, { params }: { params: Promise<{ roadmapId: string }> }) {
   const { roadmapId } = await params;
-
   try {
     await prisma.roadmap.delete({ where: { id: roadmapId } });
     return NextResponse.json({ success: true });

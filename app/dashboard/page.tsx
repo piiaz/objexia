@@ -220,10 +220,11 @@ export default function Dashboard() {
       r.userId !== user?.id && r.collaborators?.[0]?.status === 'PENDING'
   );
 
-  const handleInvitationAction = async (roadmapId: string, action: 'ACCEPT' | 'REJECT') => {
+const handleInvitationAction = async (roadmapId: string, action: 'ACCEPT' | 'REJECT') => {
       if (!user?.id) return;
       try {
-          const res = await fetch('/api/roadmaps/invitations', {
+          // THE FIX: Notice the backticks and ${roadmapId} in the URL
+          const res = await fetch(`/api/roadmaps/${roadmapId}/invitations`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ roadmapId, userId: user.id, action })
