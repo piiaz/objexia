@@ -767,6 +767,29 @@ export default function Timeline({ roadmapId }: Props) {
       <div 
         ref={containerRef}
         className="flex-1 overflow-auto relative bg-slate-50/50 dark:bg-[#191b19] custom-scrollbar"
+        onPointerMove={(e) => {
+            const container = containerRef.current;
+            const canvas = canvasRef.current;
+            if (!container || !canvas) return;
+            
+            const rect = container.getBoundingClientRect();
+            
+            // Only track if mouse is within the scrolling grid area (Below Navbar)
+            if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                // THE FIX: Calculate relative to the specific scrollable inner canvas, NOT the screen!
+                const canvasRect = canvas.getBoundingClientRect();
+                const x = e.clientX - canvasRect.left;
+                const y = e.clientY - canvasRect.top;
+                
+                updateMyPresence({ cursor: { x, y } });
+            } else {
+                // Hide cursor if they move over the top navbar
+                if (!isAnyModalOpen) updateMyPresence({ cursor: null });
+            }
+        }}
+        onPointerLeave={() => {
+            if (!isAnyModalOpen) updateMyPresence({ cursor: null });
+        }}
       >
         <AnimatePresence mode="wait">
             {isLoading ? (
@@ -801,30 +824,14 @@ export default function Timeline({ roadmapId }: Props) {
                 </motion.div>
             ) : (
                 <DndContext onDragEnd={handleDragEnd} sensors={sensors} collisionDetection={closestCenter}>
-                    {/* THE FIX: Inner Canvas Container. Pointer events live HERE so they track math on the grid itself! */}
+                    {/* THE FIX: Inner Canvas Container. Pointer events map relative to THIS element! */}
                     <motion.div 
                         key="timeline-content"
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                         ref={canvasRef}
                         className="min-w-max relative"
-                        onPointerMove={(e) => {
-                            const canvas = canvasRef.current;
-                            if (!canvas) return;
-                            const rect = canvas.getBoundingClientRect();
-                            
-                            // Perfect math: Calculate mouse X/Y entirely within the grid canvas boundary
-                            const x = e.clientX - rect.left;
-                            const y = e.clientY - rect.top;
-                            updateMyPresence({ cursor: { x, y } });
-                        }}
-                        onPointerLeave={() => {
-                            // Only hide cursor if they completely left the board (and aren't typing in a modal)
-                            if (!isAnyModalOpen) {
-                                updateMyPresence({ cursor: null });
-                            }
-                        }}
                     >
-                        {/* LiveCursors is now safely trapped inside the Canvas overflow bounds */}
+                        {/* LiveCursors is now safely trapped inside the Canvas bounds */}
                         <LiveCursors />
 
                         <div 
