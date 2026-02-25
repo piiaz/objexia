@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, League_Spartan } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "./context/AuthContext";
-import CommandPalette from "./components/CommandPalette"; // <--- ADDED IMPORT
+import CommandPalette from "./components/CommandPalette";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,7 +32,28 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="scroll-smooth">
+    // suppressHydrationWarning is required here so Next.js doesn't throw an error 
+    // when our script injects the 'dark' class before React officially loads
+    <html lang="en" className="scroll-smooth" suppressHydrationWarning>
+      <head>
+        {/* THE FIX: Pre-paint script to stop the white flash on refresh */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                var theme = localStorage.getItem('roadmap_theme');
+                if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                  document.documentElement.classList.add('dark');
+                  document.body.classList.add('dark');
+                } else {
+                  document.documentElement.classList.remove('dark');
+                  document.body.classList.remove('dark');
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
+      </head>
       <body
         className={`
           ${geistSans.variable} ${geistMono.variable} ${leagueSpartan.variable} 

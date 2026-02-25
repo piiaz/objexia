@@ -31,16 +31,18 @@ export default function SortableSidebar({
   const availableHeight = laneHeight - 48 - extraOffset;
   const maxLines = Math.max(1, Math.floor(availableHeight / 20));
 
-  const finalTransform = isDragging && transform 
-      ? `translate3d(${transform.x}px, ${transform.y}px, 0) scale(1.02) rotate(1deg)`
-      : CSS.Translate.toString(transform);
+  // --- THE FIX: This is the line that was missing! ---
+  const lockedTransform = transform ? { ...transform, x: 0 } : null;
+
+  const finalTransform = isDragging && lockedTransform 
+      ? `translate3d(0px, ${lockedTransform.y}px, 0) scale(1.02)`
+      : CSS.Translate.toString(lockedTransform);
 
   const style = {
     gridColumn: 1,
     gridRow: gridRow,
     transform: finalTransform,
     transition: isDragging ? 'none' : transition,
-    // UPGRADED: High z-index to dominate any hovered roadmap items
     zIndex: isDragging ? 1000 : 80, 
   }
 
@@ -48,7 +50,6 @@ export default function SortableSidebar({
     <div 
       ref={setNodeRef}
       style={style}
-      // UPGRADED: px-3 for spacing, z-80 and isolate for perfect clipping
       className="sticky left-0 h-full w-full group/sidebar touch-none py-2 px-3 z-[80] isolate"
     >
       {sidebarOpen && (

@@ -212,12 +212,14 @@ export default function ItemEditorModal({
 
   const isEditing = !!editObjective || !!editMilestone;
 
+  // --- THE FIX: SHARED CLASS FOR ALL DATE PICKERS SO THEY MATCH THE INPUTS ---
+  const sharedDatePickerClass = "!py-3.5 !text-base !bg-gray-50 dark:!bg-slate-800/50 !border-gray-200 dark:!border-slate-700 !rounded-2xl";
+
   return (
     <>
       <AnimatePresence>
         {isOpen && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-            {/* UPGRADED: Deep blur backdrop */}
             <motion.div 
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
                 onClick={onClose} 
@@ -226,7 +228,6 @@ export default function ItemEditorModal({
             
             <motion.div 
               layout
-              // UPGRADED: Spring-loaded physics
               initial={{ scale: 0.9, opacity: 0, y: 30 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 30 }}
@@ -266,7 +267,6 @@ export default function ItemEditorModal({
                         >
                             <div>
                                 <label className="block text-xs font-extrabold text-gray-500 dark:text-slate-400 uppercase tracking-widest mb-2">Initiative Name</label>
-                                {/* UPGRADED: Glowing Input */}
                                 <input autoFocus required type="text" value={title} onChange={(e) => setTitle(e.target.value)} 
                                     className="w-full px-5 py-4 bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 focus:bg-white dark:focus:bg-[#191b19] focus:border-[#3f407e] dark:focus:border-[#b3bbea] focus:ring-4 focus:ring-[#3f407e]/10 dark:focus:ring-[#b3bbea]/10 rounded-2xl outline-none text-lg font-bold text-gray-900 dark:text-white transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500 shadow-sm"
                                     placeholder="e.g. Q1 Global Expansion"
@@ -276,11 +276,11 @@ export default function ItemEditorModal({
                             <div className="grid grid-cols-2 gap-5">
                                 <div>
                                     <label className="block text-xs font-extrabold text-gray-500 dark:text-slate-400 uppercase tracking-widest mb-2">Start Date</label>
-                                    <SmartDatePicker value={startDate} onChange={setStartDate} maxDate={endDate} className="w-full shadow-sm" usePortal={true} />
+                                    <SmartDatePicker value={startDate} onChange={setStartDate} maxDate={endDate} className="w-full shadow-sm" inputClassName={sharedDatePickerClass} usePortal={true} />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-extrabold text-gray-500 dark:text-slate-400 uppercase tracking-widest mb-2">End Date</label>
-                                    <SmartDatePicker value={endDate} onChange={setEndDate} minDate={startDate} className="w-full shadow-sm" usePortal={true} />
+                                    <SmartDatePicker value={endDate} onChange={setEndDate} minDate={startDate} className="w-full shadow-sm" inputClassName={sharedDatePickerClass} usePortal={true} />
                                 </div>
                             </div>
 
@@ -327,7 +327,7 @@ export default function ItemEditorModal({
 
                             <div>
                                 <label className="block text-xs font-extrabold text-gray-500 dark:text-slate-400 uppercase tracking-widest mb-2">Date</label>
-                                <SmartDatePicker value={date} onChange={setDate} className="w-full shadow-sm" usePortal={true} />
+                                <SmartDatePicker value={date} onChange={setDate} className="w-full shadow-sm" inputClassName={sharedDatePickerClass} usePortal={true} />
                             </div>
 
                             <div>
@@ -367,12 +367,11 @@ export default function ItemEditorModal({
 
               <div className="p-6 border-t border-gray-100 dark:border-slate-800 bg-gray-50/80 dark:bg-[#191b19] flex justify-between items-center z-10 relative">
                 {isEditing ? (
-                 <button type="button" onClick={() => setIsConfirmOpen(true)} className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 font-bold text-sm px-4 py-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors border border-transparent hover:border-red-200 dark:hover:border-red-800">Delete</button>
+                 <button type="button" onClick={() => setIsConfirmOpen(true)} className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 font-bold text-sm px-4 py-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors border border-transparent hover:border-red-200 dark:border-red-800">Delete</button>
                 ) : <div />}
                 
                 <div className="flex gap-3">
                   <button type="button" onClick={onClose} className="px-6 py-3 text-sm font-bold text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-800 rounded-xl transition-colors">Cancel</button>
-                  {/* UPGRADED: Premium Save Button */}
                   <button 
                     form="item-form"
                     disabled={!groupId || !title || !hasChanges} 

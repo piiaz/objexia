@@ -31,7 +31,7 @@ export async function PATCH(
 ) {
   const { userId } = await params;
   
-  try {
+try {
     const body = await req.json();
     const updatedUser = await prisma.user.update({
       where: { id: userId },
@@ -41,7 +41,9 @@ export async function PATCH(
         jobTitle: body.jobTitle,
         avatarUrl: body.avatarUrl,
         age: body.age,
-        gender: body.gender
+        gender: body.gender,
+        // THE FIX: Allow theme to be saved to DB safely
+        theme: body.theme !== undefined ? body.theme : undefined 
       }
     });
 

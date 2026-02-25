@@ -13,6 +13,7 @@ export type UserProfile = {
     avatarUrl?: string;
     age?: string;       // <--- ADDED
     gender?: string;    // <--- ADDED
+    theme?: string;     // <--- ADDED
 }
 // -----------------------------------
 
@@ -34,6 +35,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const router = useRouter()
+
+    // NEW: Automatically apply the user's saved DB theme when they log in!
+    useEffect(() => {
+        if (user?.theme) {
+            localStorage.setItem('roadmap_theme', user.theme);
+            if (user.theme === 'dark') {
+                document.documentElement.classList.add('dark');
+                document.body.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+                document.body.classList.remove('dark');
+            }
+            window.dispatchEvent(new CustomEvent('objexia-theme-change'));
+        }
+    }, [user?.theme]);
 
     // Persistent Login: Check local storage on refresh
     useEffect(() => {

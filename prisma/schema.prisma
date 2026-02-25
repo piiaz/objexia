@@ -20,6 +20,7 @@ model User {
   avatarUrl String?
   age       String?
   gender    String?
+  theme     String?   @default("light") // <--- NEW: Theme Preference
   
   // --- AUTH FIELDS ---
   provider   String?   @default("email") // 'email' or 'google'

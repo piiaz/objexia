@@ -6,8 +6,13 @@ import "react-datepicker/dist/react-datepicker.css"
 import { format, parseISO, isValid, getMonth, getYear } from 'date-fns'
 
 // --- CUSTOM CSS ---
-// Removed 'overflow: hidden' so our custom dropdowns can pop out if needed
 const customDatePickerStyles = `
+  /* THE FIX: Force the hidden wrapper to take full width */
+  .react-datepicker-wrapper {
+    width: 100%;
+    display: block;
+  }
+
   .react-datepicker {
     font-family: inherit;
     font-size: 0.8rem !important;
@@ -76,7 +81,6 @@ const MONTHS = [
 ];
 
 // --- CUSTOM HEADER COMPONENT ---
-// This replaces the default green bar with our interactive "Objexia" header
 const CustomHeader = ({ date, changeYear, changeMonth, decreaseMonth, increaseMonth }: any) => {
     const [showMonthList, setShowMonthList] = useState(false);
     const [showYearList, setShowYearList] = useState(false);
@@ -181,7 +185,7 @@ export default function SmartDatePicker({ value, onChange, minDate, maxDate, cla
         <div className={`relative ${className}`}>
             <style>{customDatePickerStyles}</style>
             
-            <div className="relative group">
+            <div className="relative group w-full">
                 <DatePicker
                     selected={selectedDate}
                     onChange={handleDateChange}
@@ -193,12 +197,12 @@ export default function SmartDatePicker({ value, onChange, minDate, maxDate, cla
                     // --- INJECT CUSTOM HEADER ---
                     renderCustomHeader={(props) => <CustomHeader {...props} />}
                     
-                    className={`w-full pl-3 pr-9 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-[#3f407e] focus:border-transparent dark:focus:border-transparent outline-none text-sm font-bold text-gray-700 dark:text-slate-200 cursor-pointer transition-shadow shadow-sm hover:border-[#3f407e]/30 ${inputClassName || 'py-2'}`}
+                    className={`w-full pl-4 pr-10 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-[#3f407e] focus:border-transparent dark:focus:border-transparent outline-none text-sm font-bold text-gray-700 dark:text-slate-200 cursor-pointer transition-shadow shadow-sm hover:border-[#3f407e]/30 ${inputClassName || 'py-2'}`}
                     placeholderText="Select date..."
                     onFocus={(e) => (e.target as HTMLInputElement).readOnly = true} 
                 />
                 
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#3f407e] dark:text-[#b3bbea] opacity-70 group-hover:opacity-100 transition-opacity">
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-[#3f407e] dark:text-[#b3bbea] opacity-70 group-hover:opacity-100 transition-opacity">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                         <line x1="16" y1="2" x2="16" y2="6"></line>

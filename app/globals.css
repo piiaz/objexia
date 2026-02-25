@@ -190,3 +190,18 @@ html.dark .react-datepicker__day--selected {
   background-color: #b3bbea !important; /* Brand Light */
   color: #191b19 !important; /* Brand Black Text */
 }
+
+
+/* --- NUKE THE LIVEBLOCKS BADGE --- */
+#liveblocks-badge {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    transform: scale(0) !important;
+    width: 0 !important;
+    height: 0 !important;
+    position: absolute !important;
+    z-index: -9999 !important;
+}
+

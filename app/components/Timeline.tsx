@@ -10,7 +10,7 @@ import {
   isSameDay 
 } from 'date-fns' 
 import { 
-  DndContext, useDroppable, DragEndEvent, useSensor, useSensors, 
+  DndContext, useDroppable, DragEndEvent, DragStartEvent, useSensor, useSensors, 
   PointerSensor, TouchSensor, closestCenter 
 } from '@dnd-kit/core'
 import { 
@@ -60,7 +60,6 @@ function DroppableLane({ groupId, height, rowIndex, headerRows }: { groupId: str
   )
 }
 
-// --- UPGRADED: CURSORS BLUR BEHIND MODALS ---
 function LiveCursors() {
     const others = useOthers();
     
@@ -71,7 +70,6 @@ function LiveCursors() {
                 return (
                     <motion.div
                         key={connectionId}
-                        // THE FIX: z-[140] puts it above headers, but perfectly BELOW modals and backdrops!
                         className="absolute top-0 left-0 pointer-events-none z-[140]"
                         animate={{ x: presence.cursor.x, y: presence.cursor.y }}
                         transition={{ type: "spring", damping: 40, mass: 0.5, stiffness: 500 }}
@@ -103,7 +101,6 @@ function LiveCursors() {
     );
 }
 
-// --- UPGRADED: RICH USER PROFILE HOVER CARDS WITH "CLICK TO TRACK" ---
 function ActiveUserAvatar({ info, presence, onJump }: { info: any, presence: any, onJump: () => void }) {
     const [isOpen, setIsOpen] = useState(false);
     return (
@@ -113,7 +110,7 @@ function ActiveUserAvatar({ info, presence, onJump }: { info: any, presence: any
             onMouseLeave={() => setIsOpen(false)}
             onClick={() => {
                 setIsOpen(!isOpen);
-                onJump(); // THE FIX: Click avatar to jump to their mouse!
+                onJump();
             }}
             title={`Jump to ${info?.name}`}
         >
@@ -121,7 +118,6 @@ function ActiveUserAvatar({ info, presence, onJump }: { info: any, presence: any
                 className="w-9 h-9 rounded-full border-[3px] border-white dark:border-[#191b19] overflow-hidden shadow-sm z-10 transition-transform hover:scale-110" 
                 style={{ backgroundColor: info?.color || '#3f407e' }}
             >
-                {/* THE FIX: referrerPolicy ensures Google photos don't 403 error */}
                 {info?.avatar 
                     ? <img src={info.avatar} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> 
                     : <div className="w-full h-full flex justify-center items-center text-white text-xs font-bold">{info?.name?.[0] || '?'}</div>
@@ -214,7 +210,14 @@ export default function Timeline({ roadmapId }: Props) {
   
   const [shakeButton, setShakeButton] = useState(false);
 
-  // Global state to detect if ANY modal is open (so we don't delete their cursor when they type!)
+  // --- Drag Tracking State ---
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+
+  const isDraggingGroup = useMemo(() => {
+      if (!activeDragId) return false;
+      return groups.some(g => g.id === activeDragId);
+  }, [activeDragId, groups]);
+
   const isAnyModalOpen = isModalOpen || milestoneModalOpen || laneManagerMode !== null || isShareModalOpen || importConfirmOpen;
 
   const roadmapStart = useMemo(() => parseISO(dateRange.start), [dateRange.start]);
@@ -242,6 +245,35 @@ export default function Timeline({ roadmapId }: Props) {
       }
   }, [roadmapId, canEdit, broadcast]);
 
+  // --- THE WATERMARK SNIPER ---
+  useEffect(() => {
+      const nukeWatermark = () => {
+          // 1. Target the exact ID from the DOM
+          const badge = document.getElementById('liveblocks-badge');
+          if (badge) badge.remove();
+
+          // 2. Fallback: Target the link and remove its parent wrapper
+          const links = document.querySelectorAll('a[href*="liveblocks"]');
+          links.forEach(link => {
+              const wrapper = link.closest('div');
+              if (wrapper && wrapper.style.position === 'fixed') {
+                  wrapper.remove();
+              } else {
+                  link.remove();
+              }
+          });
+      };
+
+      // Nuke on mount
+      nukeWatermark();
+
+      // Set up mutation observer to kill it if it respawns
+      const observer = new MutationObserver(nukeWatermark);
+      observer.observe(document.body, { childList: true, subtree: true });
+
+      return () => observer.disconnect();
+  }, []);
+
   useEffect(() => {
     if (!isLoading && (items.length > 0 || milestones.length > 0 || groups.length > 0)) {
         const event = new CustomEvent('objexia-roadmap-data', { detail: { items, milestones, groups } });
@@ -266,7 +298,8 @@ export default function Timeline({ roadmapId }: Props) {
     return null;
   }, [roadmapStart, roadmapEnd]);
 
-  const handleJumpToToday = () => {
+  // --- WRAPPED IN USECALLBACK FOR DEPENDENCY ARRAY ---
+  const handleJumpToToday = useCallback(() => {
       if (!todayColumnIndex) {
           setShakeButton(true);
           setTimeout(() => setShakeButton(false), 500);
@@ -280,13 +313,34 @@ export default function Timeline({ roadmapId }: Props) {
           const scrollLeft = line.offsetLeft - (container.clientWidth / 2) + (line.clientWidth / 2);
           container.scrollTo({ left: scrollLeft, behavior: 'smooth' });
       }
-  };
+  }, [todayColumnIndex]);
 
-  // --- THE FIX: JUMP TO OTHER USER'S CURSOR ---
+// --- NEW: GLOBAL SHORTCUTS FOR WORKSPACE (D, J) ---
+  useEffect(() => {
+      const handleKeyUp = (e: KeyboardEvent) => {
+          const target = e.target as HTMLElement;
+          // Don't trigger if typing in an input, textarea, or contenteditable area
+          if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+              return;
+          }
+
+          // Ignore if Cmd, Ctrl, or Alt is pressed
+          if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+          if (e.key.toLowerCase() === 'd') {
+              router.push('/dashboard');
+          } else if (e.key.toLowerCase() === 'j') {
+              handleJumpToToday();
+          }
+      };
+
+      window.addEventListener('keyup', handleKeyUp);
+      return () => window.removeEventListener('keyup', handleKeyUp);
+  }, [router, handleJumpToToday]);
+
   const handleJumpToUser = (x: number, name: string) => {
       if (!containerRef.current) return;
       const container = containerRef.current;
-      // Subtract half the screen width so the cursor is perfectly centered!
       const scrollLeft = x - (container.clientWidth / 2);
       container.scrollTo({ left: scrollLeft, behavior: 'smooth' });
       toast(`Located ${name}`, { icon: '📍', id: 'jump-toast' });
@@ -486,6 +540,7 @@ export default function Timeline({ roadmapId }: Props) {
   }
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    setActiveDragId(null);
     if (!user) { setIsAuthBarrierOpen(true); return; }
     if (!canEdit) return;
 
@@ -571,7 +626,6 @@ export default function Timeline({ roadmapId }: Props) {
       } 
   }
   
-  // MODAL HANDLERS EMITTING LIVE ACTIVITY
   const handleEditLane = (group: Group) => { if (!canEdit) return; checkAuth(() => { setEditingLaneId(group.id); setLaneManagerMode('manage'); updateMyPresence({ activity: `Configuring Tracks` }); }) }
   const openNewItemModal = () => { if (!canEdit) return; checkAuth(() => { setEditingItem(null); setIsModalOpen(true); updateMyPresence({ activity: `Creating new initiative` }); }) }
   const handleItemClick = (item: Item) => { if (!canEdit) return; checkAuth(() => { setEditingItem(item); setIsModalOpen(true); updateMyPresence({ activity: `Editing: ${item.title}` }); }) }
@@ -698,7 +752,7 @@ export default function Timeline({ roadmapId }: Props) {
                       ? 'bg-red-100 border-red-300 text-red-500 dark:bg-red-900/30 dark:border-red-800 dark:text-red-400' 
                       : 'border-slate-200 dark:border-slate-700 text-slate-400 hover:text-[#3f407e] dark:hover:text-[#b3bbea] hover:bg-slate-50 dark:hover:bg-slate-800'
               }`}
-              title="Jump to Today"
+              title="Jump to Today (J)"
           >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10"></circle>
@@ -794,7 +848,11 @@ export default function Timeline({ roadmapId }: Props) {
       {/* --- MAIN CONTENT AREA --- */}
       <div 
         ref={containerRef}
-        className="flex-1 overflow-auto relative bg-slate-50/50 dark:bg-[#191b19] custom-scrollbar"
+        className="flex-1 relative bg-slate-50/50 dark:bg-[#191b19] custom-scrollbar"
+        style={{
+            overflowY: 'auto',
+            overflowX: isDraggingGroup ? 'hidden' : 'auto' 
+        }}
         onPointerMove={(e) => {
             const canvas = canvasRef.current;
             if (!canvas) return;
@@ -845,7 +903,14 @@ export default function Timeline({ roadmapId }: Props) {
                     </div>
                 </motion.div>
             ) : (
-                <DndContext onDragEnd={handleDragEnd} sensors={sensors} collisionDetection={closestCenter}>
+                <DndContext 
+                    onDragStart={(e) => setActiveDragId(e.active.id.toString())}
+                    onDragEnd={handleDragEnd} 
+                    onDragCancel={() => setActiveDragId(null)}
+                    sensors={sensors} 
+                    collisionDetection={closestCenter}
+                    autoScroll={!isDraggingGroup} // THE FIX: Disables grid auto-scroll when a track is held
+                >
                     <motion.div 
                         key="timeline-content"
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -891,11 +956,12 @@ export default function Timeline({ roadmapId }: Props) {
                             {/* Grid Lines */}
                             {Array.from({ length: totalDays }).map((_, i) => { const currentDay = addDays(roadmapStart, i); const styles = getLineStyles(currentDay, timeView, i === 0); return (<div key={i} className={`border-l ${styles.border} ${styles.bg} transition-colors duration-500 ease-in-out pointer-events-none z-[1]`} style={{ gridColumn: i + 2, gridRow: `${styles.rowStart} / ${groups.length + headerRowsCount + 1}` }} />); })}
 
-                            {/* Today Indicator */}
+{/* Today Indicator */}
                             {todayColumnIndex && (
                                 <div
                                     ref={todayRef}
-                                    className="pointer-events-none z-[105] relative h-full w-full"
+                                    // THE FIX: Changed z-[105] to z-[50] so it slides UNDER the sticky sidebar!
+                                    className="pointer-events-none z-[50] relative h-full w-full"
                                     style={{ gridColumn: `${todayColumnIndex} / span 1`, gridRow: `1 / ${groups.length + headerRowsCount + 2}` }}
                                 >
                                     <div className="absolute left-1/2 -translate-x-1/2 h-full w-[2px] bg-[#3f407e] dark:bg-[#b3bbea] shadow-[0_0_15px_rgba(63,64,126,0.8)] dark:shadow-[0_0_20px_rgba(179,184,234,0.9)] animate-pulse">
