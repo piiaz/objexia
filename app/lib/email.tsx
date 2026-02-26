@@ -1,26 +1,20 @@
-// app/lib/email.ts
-
 import nodemailer from 'nodemailer';
 
-// Create the transporter once (outside the function)
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.EMAIL_USER, // objexia.team@gmail.com
-    pass: process.env.EMAIL_PASS, // This must be an APP PASSWORD, not your login password
+    user: process.env.EMAIL_USER, 
+    pass: process.env.EMAIL_PASS, 
   },
 });
 
 export async function sendVerificationEmail(email: string, otp: string) {
   try {
-    // Verify connection configuration
-    await transporter.verify();
-
     const info = await transporter.sendMail({
-      from: '"Objexia Team" <objexia.team@gmail.com>', // Sender address
-      to: email, // Receiver address
-      subject: 'Verify your Objexia Account', // Subject line
-      text: `Your verification code is: ${otp}`, // Plain text body
+      from: '"Objexia Team" <objexia.team@gmail.com>',
+      to: email, 
+      subject: 'Verify your Objexia Account', 
+      text: `Your verification code is: ${otp}`, 
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px; background-color: #fafafa;">
           <h2 style="color: #3f407e; text-align: center;">Welcome to Objexia!</h2>
@@ -40,7 +34,7 @@ export async function sendVerificationEmail(email: string, otp: string) {
     return true;
 
   } catch (error) {
-    console.error("Error sending email:", error);
+    console.error("🚨 Error sending email:", error);
     throw new Error("Failed to send verification email");
   }
 }
