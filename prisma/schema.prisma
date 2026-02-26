@@ -129,3 +129,18 @@ model RoadmapAccess {
   // A user can only have one specific role per roadmap
   @@unique([roadmapId, userId]) 
 }
+
+
+
+model PendingUser {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String   
+  firstName String
+  lastName  String?
+  jobTitle  String?  
+  age       String?  
+  otp       String   
+  expiresAt DateTime 
+  createdAt DateTime @default(now())
+}

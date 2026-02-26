@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import Script from 'next/script' 
 import { motion, AnimatePresence } from 'framer-motion'
-import { useRouter, useSearchParams } from 'next/navigation' // <--- ADDED
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '../context/AuthContext'
 import ThemeToggle from '../components/ThemeToggle'
 import ObjexiaLogo from '../components/ObjexiaLogo'
@@ -114,15 +114,14 @@ function GoogleLoginBtn({ onSuccess, text = "signup_with" }: { onSuccess: (cred:
 
 function SignupForm() {
     const { signup } = useAuth()
-    const searchParams = useSearchParams() // <--- ADDED
-    const redirectUrl = searchParams.get('redirect') || '/dashboard' // <--- REDIRECT URL
+    const searchParams = useSearchParams() 
+    const redirectUrl = searchParams.get('redirect') || '/dashboard' 
     
     const [formData, setFormData] = useState({ firstName: '', lastName: '', email: '', password: '', jobTitle: '', age: '' })
     const [touched, setTouched] = useState<Record<string, boolean>>({})
     const [error, setError] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [showVerify, setShowVerify] = useState(false)
-    const [tempUserId, setTempUserId] = useState('')
 
     const handleGoogleSuccess = async (credential: string) => {
         setIsLoading(true);
@@ -135,7 +134,7 @@ function SignupForm() {
             const data = await res.json();
             if (res.ok) {
                 localStorage.setItem('roadmap_user', JSON.stringify(data.user));
-                window.location.href = redirectUrl; // <--- REDIRECT HERE
+                window.location.href = redirectUrl; 
             } else { setError(data.error); }
         } catch (e) { setError("Google signup failed"); }
         finally { setIsLoading(false); }
@@ -150,35 +149,60 @@ function SignupForm() {
             return;
         }
 
-        setError(null); setIsLoading(true);
+        setError(null); 
+        setIsLoading(true);
+        
         try {
             const res = await fetch('/api/auth/signup', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(formData) 
             });
+            
             const data = await res.json();
+            
             if (!res.ok) throw new Error(data.error || 'Signup failed');
-            if (data.requiresVerification) { setTempUserId(data.userId); setShowVerify(true); }
-        } catch (err: any) { setError(err.message) } 
-        finally { setIsLoading(false) }
+            
+            // Show verification modal on success
+            if (data.requiresVerification) { 
+                setShowVerify(true); 
+            }
+            
+        } catch (err: any) { 
+            setError(err.message) 
+        } finally { 
+            setIsLoading(false) 
+        }
     }
 
+    // --- THE FIX: Pass email instead of userId to the verification route ---
     const handleVerifyPin = async (pin: string) => {
         setIsLoading(true);
+        setError(null);
+        
         try {
             const res = await fetch('/api/auth/verify', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ userId: tempUserId, pin })
+                // Sending the email from state!
+                body: JSON.stringify({ email: formData.email, pin }) 
             });
+            
             const data = await res.json();
+            
             if (res.ok) {
+                // Instantly log them in!
                 localStorage.setItem('roadmap_user', JSON.stringify(data.user));
-                window.location.href = redirectUrl; // <--- REDIRECT HERE
-            } else { setError(data.error); }
-        } catch (e) { setError("Verification failed"); } 
-        finally { setIsLoading(false); }
+                window.location.href = redirectUrl; 
+            } else { 
+                // Display the specific holding pen errors (e.g. "expired") inside the modal
+                setError(data.error); 
+            }
+        } catch (e) { 
+            setError("Verification failed. Please check your connection."); 
+        } finally { 
+            setIsLoading(false); 
+        }
     }
 
     const handleBlur = (field: string) => {
@@ -204,6 +228,7 @@ function SignupForm() {
                 transition={{ duration: 0.4, ease: "easeOut" }} 
                 className="w-full max-w-[440px] max-h-[90vh] flex flex-col bg-white/80 dark:bg-[#1e2126]/90 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-200/50 dark:shadow-black/40 border border-white/50 dark:border-slate-700/50 relative overflow-y-auto custom-scrollbar mx-4"
             >
+                {/* ... (All your existing form JSX stays exactly the same) ... */}
                 <div className="p-8">
                     <div className="text-center mb-6">
                         <div className="inline-flex justify-center items-center mb-4 p-3 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-[0_0_20px_rgba(63,64,126,0.15)] dark:shadow-[0_0_25px_rgba(179,187,234,0.1)]">
@@ -213,7 +238,7 @@ function SignupForm() {
                     </div>
 
                     <AnimatePresence>
-                        {error && (
+                        {error && !showVerify && (
                             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-4 overflow-hidden">
                                 <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-lg text-xs font-bold text-red-600 dark:text-red-400 flex items-center justify-center gap-2">
                                     {error}
